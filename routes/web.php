@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\GoogleSearchConsoleAuthController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/admin');
 });
 
 Route::get('/google/connect', [GoogleSearchConsoleAuthController::class, 'redirect']);

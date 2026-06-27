@@ -14,9 +14,10 @@ class SeoKeywordsTable
     {
         return $table
             ->columns([
-                TextColumn::make('site_id')
-                    ->numeric()
-                    ->sortable(),
+                TextColumn::make('site.site_url')
+                    ->label('Site')
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('query_text')
                     ->searchable(),
                 TextColumn::make('normalized_query')

@@ -38,8 +38,56 @@ class GscSitesTable
             ->filters([
                 //
             ])
-            ->recordActions([
+            ->actions([
                 EditAction::make(),
+                \Filament\Actions\Action::make('importKeywords')
+                    ->label('Import Keywords')
+                    ->icon('heroicon-o-cloud-arrow-down')
+                    ->color('warning')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('date')
+                            ->label('Date')
+                            ->default(now()->subDays(3)->format('Y-m-d'))
+                            ->required()
+                    ])
+                    ->action(function (\App\Models\GscSite $record, array $data) {
+                        try {
+                            set_time_limit(300);
+                            \Illuminate\Support\Facades\Artisan::call('seo:import-gsc', [
+                                'site_id' => $record->id,
+                                '--date' => $data['date']
+                            ]);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Import completed successfully')
+                                ->success()
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Import failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+                \Filament\Actions\Action::make('aggregateKeywords')
+                    ->label('Aggregate Keywords')
+                    ->icon('heroicon-o-circle-stack')
+                    ->color('info')
+                    ->action(function (\App\Models\GscSite $record) {
+                        try {
+                            \Illuminate\Support\Facades\Artisan::call('seo:aggregate-keywords', ['site_id' => $record->id]);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Keywords aggregated successfully')
+                                ->success()
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Aggregation failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

@@ -8,5 +8,7 @@ class GoogleOauthToken extends Model
 {
     protected $guarded = [];
 
-    //
+    protected $casts = [
+        'expires_at' => 'datetime',
+    ];
 }
