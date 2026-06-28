@@ -22,3 +22,10 @@ Schedule::call(function () {
         Artisan::call('seo:aggregate-keywords', ['site_id' => $site->id]);
     }
 })->dailyAt('04:00');
+
+Schedule::call(function () {
+    $sites = GscSite::where('is_active', true)->where('agent_enabled', true)->get();
+    foreach ($sites as $site) {
+        Artisan::call('seo:run-agent', ['site_id' => $site->id]);
+    }
+})->dailyAt('06:00');

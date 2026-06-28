@@ -88,6 +88,28 @@ class GscSitesTable
                                 ->send();
                         }
                     }),
+                \Filament\Actions\Action::make('runAgent')
+                    ->label('Run Agent')
+                    ->icon('heroicon-o-cpu-chip')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->action(function (\App\Models\GscSite $record) {
+                        try {
+                            set_time_limit(600);
+                            \Illuminate\Support\Facades\Artisan::call('seo:run-agent', ['site_id' => $record->id]);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Agent execution completed')
+                                ->body('The AI Agent has completed the keyword grouping and content draft generation cycle.')
+                                ->success()
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Agent failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

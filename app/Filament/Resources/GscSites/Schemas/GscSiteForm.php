@@ -7,6 +7,9 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
+use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Section;
+
 class GscSiteForm
 {
     public static function configure(Schema $schema): Schema
@@ -21,6 +24,38 @@ class GscSiteForm
                 Toggle::make('is_active')
                     ->required(),
                 DateTimePicker::make('last_imported_at'),
+                
+                Section::make('AI Agent Configuration')
+                    ->description('Set up the targeting parameters for this Search Console property.')
+                    ->schema([
+                        Toggle::make('agent_enabled')
+                            ->label('Enable Automated Agent')
+                            ->default(false),
+                        Select::make('agent_strategy')
+                            ->label('Targeting Strategy')
+                            ->options([
+                                'low_ctr' => 'Low CTR (High Impressions, Low/No Clicks - High Potential)',
+                                'high_clicks' => 'High Clicks (Focus on top performers)',
+                            ])
+                            ->default('low_ctr')
+                            ->reactive()
+                            ->required(),
+                        TextInput::make('min_impressions')
+                            ->numeric()
+                            ->label('Minimum Impressions Threshold')
+                            ->default(100)
+                            ->visible(fn ($get) => $get('agent_strategy') === 'low_ctr'),
+                        TextInput::make('max_clicks')
+                            ->numeric()
+                            ->label('Maximum Clicks Limit')
+                            ->default(10)
+                            ->visible(fn ($get) => $get('agent_strategy') === 'low_ctr'),
+                        TextInput::make('grouping_limit')
+                            ->numeric()
+                            ->label('Batch Size (Keywords to group at once)')
+                            ->default(50)
+                            ->required(),
+                    ]),
             ]);
     }
 }

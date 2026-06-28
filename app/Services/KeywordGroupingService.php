@@ -17,16 +17,22 @@ class KeywordGroupingService
 
     public function groupKeywordsForSite(GscSite $site, int $limit = 50)
     {
-        // 1. Get ungrouped top keywords
-        // Using a subquery to find keywords that are not in any group
-        $keywords = SeoKeyword::where('site_id', $site->id)
+        $query = SeoKeyword::where('site_id', $site->id)
             ->whereNotIn('id', function($q) {
                 $q->select('keyword_id')->from('seo_keyword_group_keywords');
-            })
-            ->orderByDesc('total_clicks')
-            ->orderByDesc('total_impressions')
-            ->limit($limit)
-            ->get();
+            });
+
+        $limit = $site->grouping_limit ?: $limit;
+
+        if ($site->agent_strategy === 'low_ctr') {
+            $query->where('total_impressions', '>=', $site->min_impressions ?: 100)
+                  ->where('total_clicks', '<=', $site->max_clicks ?: 10)
+                  ->orderByDesc('total_impressions');
+        } else {
+            $query->orderByDesc('total_clicks');
+        }
+
+        $keywords = $query->limit($limit)->get();
 
         if ($keywords->isEmpty()) {
             return 0;
