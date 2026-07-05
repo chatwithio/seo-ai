@@ -17,4 +17,9 @@ class GscSite extends Model
     {
         return $this->hasMany(GscKeywordMetric::class, 'site_id');
     }
+
+    public function googleOauthToken()
+    {
+        return $this->belongsTo(GoogleOauthToken::class, 'google_oauth_token_id');
+    }
 }

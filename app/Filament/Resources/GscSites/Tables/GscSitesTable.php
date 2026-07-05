@@ -19,6 +19,10 @@ class GscSitesTable
                     ->searchable(),
                 TextColumn::make('name')
                     ->searchable(),
+                TextColumn::make('googleOauthToken.email')
+                    ->label('Google Account')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('permission_level')
                     ->searchable(),
                 IconColumn::make('is_active')

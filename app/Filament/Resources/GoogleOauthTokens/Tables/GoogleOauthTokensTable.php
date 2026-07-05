@@ -14,9 +14,13 @@ class GoogleOauthTokensTable
     {
         return $table
             ->columns([
-                TextColumn::make('user_id')
-                    ->numeric()
+                TextColumn::make('email')
+                    ->searchable()
                     ->sortable(),
+                TextColumn::make('status')
+                    ->badge()
+                    ->getStateUsing(fn ($record) => str_contains($record->scope ?? '', 'https://www.googleapis.com/auth/webmasters.readonly') ? 'Connected' : 'Missing Permissions')
+                    ->color(fn ($state) => $state === 'Connected' ? 'success' : 'danger'),
                 TextColumn::make('provider')
                     ->searchable(),
                 TextColumn::make('expires_at')
@@ -24,22 +28,17 @@ class GoogleOauthTokensTable
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(),
             ])
             ->filters([
                 //
             ])
-            ->recordActions([
-                EditAction::make(),
+            ->actions([
+                \Filament\Actions\DeleteAction::make(),
             ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+            ->bulkActions([
+                \Filament\Actions\BulkActionGroup::make([
+                    \Filament\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

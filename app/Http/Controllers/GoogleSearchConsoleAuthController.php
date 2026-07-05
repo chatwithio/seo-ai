@@ -29,11 +29,31 @@ class GoogleSearchConsoleAuthController extends Controller
             return redirect('/admin')->with('error', 'Google OAuth failed: ' . $token['error']);
         }
 
+        $client->setAccessToken($token);
+        
+        try {
+            $oauth2 = new \Google\Service\Oauth2($client);
+            $userInfo = $oauth2->userinfo->get();
+            $email = $userInfo->getEmail();
+        } catch (\Exception $e) {
+            return redirect('/admin')->with('error', 'Failed to retrieve user email: ' . $e->getMessage());
+        }
+
+        if (empty($email)) {
+            return redirect('/admin')->with('error', 'Google account email is required but was not found.');
+        }
+
+        $existing = GoogleOauthToken::where([
+            'user_id' => auth()->id(),
+            'provider' => 'google',
+            'email' => $email,
+        ])->first();
+
         GoogleOauthToken::updateOrCreate(
-            ['user_id' => auth()->id(), 'provider' => 'google'],
+            ['user_id' => auth()->id(), 'provider' => 'google', 'email' => $email],
             [
                 'access_token' => $token['access_token'],
-                'refresh_token' => $token['refresh_token'] ?? null,
+                'refresh_token' => $token['refresh_token'] ?? ($existing ? $existing->refresh_token : null),
                 'expires_at' => isset($token['expires_in']) ? now()->addSeconds($token['expires_in']) : null,
                 'scope' => $token['scope'] ?? null,
             ]
@@ -49,8 +69,26 @@ class GoogleSearchConsoleAuthController extends Controller
         $client->setClientSecret(config('services.google.client_secret'));
         $client->setRedirectUri(config('services.google.redirect_uri'));
         $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
+        $client->addScope('https://www.googleapis.com/auth/userinfo.email');
         $client->setAccessType('offline');
         $client->setPrompt('consent');
+
+        $stack = \GuzzleHttp\HandlerStack::create();
+        $stack->push(function (callable $handler) {
+            return function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
+                $request = $request->withHeader('Connection', 'close');
+                $options['version'] = 1.1;
+                $options['curl'][CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
+                $options['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+                $options['curl'][CURLOPT_FRESH_CONNECT] = true;
+                return $handler($request, $options);
+            };
+        });
+
+        $httpClient = new \GuzzleHttp\Client([
+            'handler' => $stack,
+        ]);
+        $client->setHttpClient($httpClient);
 
         return $client;
     }

@@ -20,6 +20,10 @@ class GscSiteForm
                     ->url()
                     ->required(),
                 TextInput::make('name'),
+                Select::make('google_oauth_token_id')
+                    ->label('Google Account')
+                    ->relationship('googleOauthToken', 'email')
+                    ->placeholder('Select Google Account'),
                 TextInput::make('permission_level'),
                 Toggle::make('is_active')
                     ->required(),

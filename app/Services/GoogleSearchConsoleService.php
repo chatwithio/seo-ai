@@ -10,24 +10,45 @@ use Exception;
 
 class GoogleSearchConsoleService
 {
-    public function makeClient(): Client
+    public function makeClient(GoogleOauthToken $tokenModel = null): Client
     {
         $client = new Client();
         $client->setClientId(config('services.google.client_id'));
         $client->setClientSecret(config('services.google.client_secret'));
         $client->setRedirectUri(config('services.google.redirect_uri'));
         $client->addScope('https://www.googleapis.com/auth/webmasters.readonly');
+        $client->addScope('https://www.googleapis.com/auth/userinfo.email');
         $client->setAccessType('offline');
         $client->setPrompt('consent');
 
+        $stack = \GuzzleHttp\HandlerStack::create();
+        $stack->push(function (callable $handler) {
+            return function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
+                $request = $request->withHeader('Connection', 'close');
+                $options['version'] = 1.1;
+                $options['curl'][CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
+                $options['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+                $options['curl'][CURLOPT_FRESH_CONNECT] = true;
+                return $handler($request, $options);
+            };
+        });
+
+        $httpClient = new \GuzzleHttp\Client([
+            'handler' => $stack,
+        ]);
+        $client->setHttpClient($httpClient);
+
         // Retrieve token
-        $tokenModel = GoogleOauthToken::where('provider', 'google')->latest()->first();
+        if (!$tokenModel) {
+            $tokenModel = GoogleOauthToken::where('provider', 'google')->latest()->first();
+        }
 
         if ($tokenModel) {
             $token = [
                 'access_token' => $tokenModel->access_token,
                 'refresh_token' => $tokenModel->refresh_token,
-                'expires_in' => $tokenModel->expires_at ? $tokenModel->expires_at->diffInSeconds(now()) : 3600,
+                'created' => time(),
+                'expires_in' => $tokenModel->expires_at ? ($tokenModel->expires_at->timestamp - time()) : 3600,
             ];
 
             $client->setAccessToken($token);
@@ -49,9 +70,9 @@ class GoogleSearchConsoleService
         return $client;
     }
 
-    public function listSites(): array
+    public function listSites(GoogleOauthToken $tokenModel = null): array
     {
-        $client = $this->makeClient();
+        $client = $this->makeClient($tokenModel);
         $service = new SearchConsole($client);
         
         try {
@@ -74,9 +95,9 @@ class GoogleSearchConsoleService
         }
     }
 
-    public function fetchSearchAnalyticsRows(string $siteUrl, string $date, int $startRow = 0, int $rowLimit = 25000): array
+    public function fetchSearchAnalyticsRows(string $siteUrl, string $date, int $startRow = 0, int $rowLimit = 25000, GoogleOauthToken $tokenModel = null): array
     {
-        $client = $this->makeClient();
+        $client = $this->makeClient($tokenModel);
         $service = new SearchConsole($client);
 
         $request = new SearchAnalyticsQueryRequest();

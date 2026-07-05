@@ -18,6 +18,10 @@ class GoogleOauthTokenResource extends Resource
 {
     protected static ?string $model = GoogleOauthToken::class;
 
+    protected static ?string $navigationLabel = 'Google Accounts';
+    protected static ?string $pluralModelLabel = 'Google Accounts';
+    protected static ?string $modelLabel = 'Google Account';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
@@ -41,8 +45,6 @@ class GoogleOauthTokenResource extends Resource
     {
         return [
             'index' => ListGoogleOauthTokens::route('/'),
-            'create' => CreateGoogleOauthToken::route('/create'),
-            'edit' => EditGoogleOauthToken::route('/{record}/edit'),
         ];
     }
 }

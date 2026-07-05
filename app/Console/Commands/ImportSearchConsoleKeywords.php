@@ -37,7 +37,13 @@ class ImportSearchConsoleKeywords extends Command
         try {
             while (true) {
                 $this->info("Fetching rows starting at {$startRow}...");
-                $rows = $gscService->fetchSearchAnalyticsRows($site->site_url, $date, $startRow, $rowLimit);
+                $rows = $gscService->fetchSearchAnalyticsRows(
+                    $site->site_url,
+                    $date,
+                    $startRow,
+                    $rowLimit,
+                    $site->googleOauthToken
+                );
                 
                 if (empty($rows)) {
                     break;

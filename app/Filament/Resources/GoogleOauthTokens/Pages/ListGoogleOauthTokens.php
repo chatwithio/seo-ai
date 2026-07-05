@@ -13,7 +13,11 @@ class ListGoogleOauthTokens extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            \Filament\Actions\Action::make('connectGoogle')
+                ->label('Connect Google Account')
+                ->icon('heroicon-o-link')
+                ->color('success')
+                ->url('/google/connect'),
         ];
     }
 }
