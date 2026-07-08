@@ -14,6 +14,28 @@ class ListGscSites extends ListRecords
     {
         return [
             CreateAction::make(),
+            \Filament\Actions\Action::make('importAllKeywords')
+                ->label('Import Keywords')
+                ->icon('heroicon-o-cloud-arrow-down')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->action(function () {
+                    try {
+                        set_time_limit(1800);
+                        \Illuminate\Support\Facades\Artisan::call('seo:import-all-gsc');
+                        \Filament\Notifications\Notification::make()
+                            ->title('Keyword import completed')
+                            ->body('Successfully imported and aggregated GSC keywords for the past 1 year across all active sites.')
+                            ->success()
+                            ->send();
+                    } catch (\Exception $e) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Import failed')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
             \Filament\Actions\Action::make('connectGoogle')
                 ->label('Connect Google Account')
                 ->icon('heroicon-o-link')

@@ -8,4 +8,9 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateSeoContentDraft extends CreateRecord
 {
     protected static string $resource = SeoContentDraftResource::class;
+
+    public function getMaxContentWidth(): string
+    {
+        return 'none';
+    }
 }

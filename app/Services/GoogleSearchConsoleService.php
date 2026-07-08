@@ -24,7 +24,8 @@ class GoogleSearchConsoleService
         $stack = \GuzzleHttp\HandlerStack::create();
         $stack->push(function (callable $handler) {
             return function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
-                $request = $request->withHeader('Connection', 'close');
+                $request = $request->withHeader('Connection', 'close')
+                                   ->withProtocolVersion('1.1');
                 $options['version'] = 1.1;
                 $options['curl'][CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
                 $options['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
@@ -35,6 +36,8 @@ class GoogleSearchConsoleService
 
         $httpClient = new \GuzzleHttp\Client([
             'handler' => $stack,
+            'timeout' => 15.0,
+            'connect_timeout' => 5.0,
         ]);
         $client->setHttpClient($httpClient);
 
@@ -135,6 +138,51 @@ class GoogleSearchConsoleService
                 'action' => 'gsc_fetch_failed',
                 'message' => $e->getMessage(),
                 'context' => ['siteUrl' => $siteUrl, 'date' => $date, 'startRow' => $startRow]
+            ]);
+            throw $e;
+        }
+    }
+
+    public function fetchSearchAnalyticsRowsForRange(string $siteUrl, string $startDate, string $endDate, int $startRow = 0, int $rowLimit = 25000, GoogleOauthToken $tokenModel = null): array
+    {
+        $client = $this->makeClient($tokenModel);
+        $service = new SearchConsole($client);
+
+        $request = new SearchAnalyticsQueryRequest();
+        $request->setStartDate($startDate);
+        $request->setEndDate($endDate);
+        $request->setDimensions(['query', 'page', 'country', 'device']);
+        $request->setType('web');
+        $request->setRowLimit($rowLimit);
+        $request->setStartRow($startRow);
+
+        try {
+            $response = $service->searchanalytics->query($siteUrl, $request);
+            $rows = $response->getRows();
+            
+            $result = [];
+            if ($rows) {
+                foreach ($rows as $row) {
+                    $keys = $row->getKeys();
+                    $result[] = [
+                        'query' => $keys[0] ?? '',
+                        'page' => $keys[1] ?? '',
+                        'country' => $keys[2] ?? '',
+                        'device' => $keys[3] ?? '',
+                        'clicks' => $row->getClicks(),
+                        'impressions' => $row->getImpressions(),
+                        'ctr' => $row->getCtr(),
+                        'position' => $row->getPosition(),
+                    ];
+                }
+            }
+            return $result;
+        } catch (Exception $e) {
+            \App\Models\SeoAuditLog::create([
+                'entity_type' => 'system',
+                'action' => 'gsc_fetch_range_failed',
+                'message' => $e->getMessage(),
+                'context' => ['siteUrl' => $siteUrl, 'startDate' => $startDate, 'endDate' => $endDate, 'startRow' => $startRow]
             ]);
             throw $e;
         }

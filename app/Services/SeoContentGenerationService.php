@@ -57,15 +57,27 @@ class SeoContentGenerationService
         return $brief;
     }
 
-    public function generateDraft(SeoContentBrief $brief)
+    public function generateDraft(SeoContentBrief $brief, array $options = [])
     {
         $promptData = $this->promptService->getPrompt('generate_draft', [
-            'brief' => json_encode($brief->toArray())
+            'brief' => json_encode($brief->toArray()),
+            'density' => $options['density'] ?? '1.5',
+            'length' => $options['length'] ?? '1000',
+            'hint' => $options['hint'] ?? 'None',
+            'language' => $options['language'] ?? 'English',
         ]);
 
         if (!$promptData) throw new \Exception("Prompt config missing for generate_draft");
 
         $htmlContent = $this->llmService->call($promptData);
+
+        // Strip markdown code fences if returned by the LLM
+        $htmlContent = trim($htmlContent);
+        if (str_starts_with($htmlContent, '```')) {
+            $htmlContent = preg_replace('/^```(?:html)?\s*/i', '', $htmlContent);
+            $htmlContent = preg_replace('/```$/', '', $htmlContent);
+            $htmlContent = trim($htmlContent);
+        }
 
         $draft = SeoContentDraft::updateOrCreate(
             ['brief_id' => $brief->id],

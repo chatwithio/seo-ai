@@ -8,5 +8,7 @@ class SeoAuditLog extends Model
 {
     protected $guarded = [];
 
-    //
+    protected $casts = [
+        'context' => 'array',
+    ];
 }

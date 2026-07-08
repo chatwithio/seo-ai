@@ -22,9 +22,11 @@ class SeoContentBriefsTable
                 TextColumn::make('slug')
                     ->searchable(),
                 TextColumn::make('meta_title')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('meta_description')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('h1')
                     ->searchable(),
                 TextColumn::make('primary_keyword')

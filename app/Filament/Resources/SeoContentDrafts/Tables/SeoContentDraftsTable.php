@@ -25,9 +25,11 @@ class SeoContentDraftsTable
                 TextColumn::make('slug')
                     ->searchable(),
                 TextColumn::make('meta_title')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('meta_description')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('status')
                     ->badge(),
                 TextColumn::make('published_at')

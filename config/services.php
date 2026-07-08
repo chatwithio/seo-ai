@@ -41,4 +41,8 @@ return [
         'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'openai' => [
+        'key' => env('LLM_API_KEY') ?: env('OPENAI_API_KEY'),
+    ],
+
 ];

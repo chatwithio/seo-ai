@@ -16,4 +16,9 @@ class EditSeoContentBrief extends EditRecord
             DeleteAction::make(),
         ];
     }
+
+    public function getMaxContentWidth(): string
+    {
+        return 'none';
+    }
 }

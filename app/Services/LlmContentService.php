@@ -15,7 +15,7 @@ class LlmContentService
             'base_uri' => 'https://api.openai.com/v1/',
             'timeout' => 120,
         ]);
-        $this->apiKey = config('services.openai.key') ?? env('OPENAI_API_KEY');
+        $this->apiKey = config('services.openai.key') ?? env('OPENAI_API_KEY') ?? env('LLM_API_KEY');
     }
 
     public function call(array $promptData): ?string
@@ -39,6 +39,7 @@ class LlmContentService
         if (!empty($promptData['output_format'])) {
             $schema = is_string($promptData['output_format']) ? json_decode($promptData['output_format'], true) : $promptData['output_format'];
             if ($schema) {
+                $schema = $this->makeSchemaStrict($schema);
                 $payload['response_format'] = [
                     'type' => 'json_schema',
                     'json_schema' => [
@@ -69,5 +70,25 @@ class LlmContentService
             ]);
             throw $e;
         }
+    }
+
+    protected function makeSchemaStrict(array $schema): array
+    {
+        if (isset($schema['type']) && $schema['type'] === 'object') {
+            $schema['additionalProperties'] = false;
+            if (isset($schema['properties']) && is_array($schema['properties'])) {
+                $schema['required'] = array_keys($schema['properties']);
+                foreach ($schema['properties'] as $key => $prop) {
+                    if (is_array($prop)) {
+                        $schema['properties'][$key] = $this->makeSchemaStrict($prop);
+                    }
+                }
+            }
+        } elseif (isset($schema['type']) && $schema['type'] === 'array') {
+            if (isset($schema['items']) && is_array($schema['items'])) {
+                $schema['items'] = $this->makeSchemaStrict($schema['items']);
+            }
+        }
+        return $schema;
     }
 }

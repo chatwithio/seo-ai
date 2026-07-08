@@ -76,7 +76,8 @@ class GoogleSearchConsoleAuthController extends Controller
         $stack = \GuzzleHttp\HandlerStack::create();
         $stack->push(function (callable $handler) {
             return function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
-                $request = $request->withHeader('Connection', 'close');
+                $request = $request->withHeader('Connection', 'close')
+                                   ->withProtocolVersion('1.1');
                 $options['version'] = 1.1;
                 $options['curl'][CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
                 $options['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
@@ -87,6 +88,8 @@ class GoogleSearchConsoleAuthController extends Controller
 
         $httpClient = new \GuzzleHttp\Client([
             'handler' => $stack,
+            'timeout' => 15.0,
+            'connect_timeout' => 5.0,
         ]);
         $client->setHttpClient($httpClient);
 
