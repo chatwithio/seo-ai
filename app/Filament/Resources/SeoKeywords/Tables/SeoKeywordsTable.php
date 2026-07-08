@@ -106,11 +106,13 @@ class SeoKeywordsTable
                     ->requiresConfirmation()
                     ->action(function () {
                         try {
-                            set_time_limit(1800);
-                            \Illuminate\Support\Facades\Artisan::call('seo:import-all-gsc');
+                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $basePath = base_path();
+                            exec("cd {$basePath} && {$php} artisan seo:import-all-gsc > /dev/null 2>&1 &");
+
                             \Filament\Notifications\Notification::make()
-                                ->title('Keyword import completed')
-                                ->body('Successfully imported and aggregated GSC keywords for the past 1 year across all active sites.')
+                                ->title('Keyword import started in background')
+                                ->body('The import process is running. You can continue working; keywords will update shortly.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
@@ -138,19 +140,106 @@ class SeoKeywordsTable
                     ])
                     ->action(function (array $data) {
                         try {
-                            set_time_limit(300);
-                            \Illuminate\Support\Facades\Artisan::call('seo:group-keywords', [
-                                'site_id' => $data['site_id'],
-                                '--limit' => $data['limit'],
-                            ]);
+                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $basePath = base_path();
+                            $siteId = (int) $data['site_id'];
+                            $limit = (int) $data['limit'];
+                            exec("cd {$basePath} && {$php} artisan seo:group-keywords {$siteId} --limit={$limit} > /dev/null 2>&1 &");
 
                             \Filament\Notifications\Notification::make()
-                                ->title('Keyword grouping completed')
+                                ->title('Keyword grouping started in background')
+                                ->body('The auto grouping process is running. Groups will appear shortly.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
                             \Filament\Notifications\Notification::make()
                                 ->title('Grouping failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+            ])
+            ->actions([
+                EditAction::make(),
+                \Filament\Actions\Action::make('generateRowContent')
+                    ->label('Generate Content')
+                    ->icon('heroicon-m-cpu-chip')
+                    ->color('success')
+                    ->button()
+                    ->form([
+                        \Filament\Forms\Components\Select::make('language')
+                            ->label('Language')
+                            ->options([
+                                'English' => 'English',
+                                'Spanish' => 'Spanish',
+                                'French' => 'French',
+                                'Italian' => 'Italian',
+                                'German' => 'German',
+                                'Portuguese' => 'Portuguese',
+                            ])
+                            ->default('English')
+                            ->required(),
+                        \Filament\Forms\Components\Select::make('density')
+                            ->label('Keyword Repeat Density (%)')
+                            ->options([
+                                '1' => '1%',
+                                '1.5' => '1.5%',
+                                '2' => '2%',
+                                '2.5' => '2.5%',
+                                '3' => '3%',
+                                '3.5' => '3.5%',
+                                '4' => '4%',
+                                '4.5' => '4.5%',
+                                '5' => '5%',
+                                '5.5' => '5.5%',
+                                '6' => '6%',
+                                '6.5' => '6.5%',
+                                '7' => '7%',
+                            ])
+                            ->default('1.5')
+                            ->required(),
+                        \Filament\Forms\Components\Select::make('length')
+                            ->label('Article Length')
+                            ->options([
+                                '500' => 'Short (~500 words)',
+                                '1000' => 'Medium (~1000 words)',
+                                '1500' => 'Long (~1500 words)',
+                            ])
+                            ->default('1000')
+                            ->required(),
+                        \Filament\Forms\Components\Textarea::make('hint')
+                            ->label('Additional Hint / Context')
+                            ->placeholder('e.g. Focus on product value, write in a casual tone')
+                            ->rows(3),
+                    ])
+                    ->action(function (\App\Models\SeoKeyword $record, array $data) {
+                        try {
+                            $site = $record->site;
+
+                            if (!$site) {
+                                throw new \Exception("The selected keyword is not associated with a valid site.");
+                            }
+
+                            $keywordIds = $record->id;
+                            $language = escapeshellarg($data['language']);
+                            $density = escapeshellarg($data['density']);
+                            $length = escapeshellarg($data['length']);
+                            $hint = escapeshellarg($data['hint'] ?? '');
+
+                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $basePath = base_path();
+                            exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Content generation started')
+                                ->body('The generation process has started in the background. You can check the Audit Logs or GSC Sites drafts list shortly.')
+                                ->success()
+                                ->send();
+
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Content generation failed')
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
@@ -220,8 +309,6 @@ class SeoKeywordsTable
                             }
 
                             try {
-                                set_time_limit(600);
-
                                 $firstKeyword = $records->first();
                                 $site = $firstKeyword->site;
 
@@ -229,49 +316,20 @@ class SeoKeywordsTable
                                     throw new \Exception("The selected keywords are not associated with a valid site.");
                                 }
 
-                                $primaryModel = $records->sortByDesc('total_clicks')->first();
+                                $keywordIds = $records->pluck('id')->implode(',');
+                                $language = escapeshellarg($data['language']);
+                                $density = escapeshellarg($data['density']);
+                                $length = escapeshellarg($data['length']);
+                                $hint = escapeshellarg($data['hint'] ?? '');
 
-                                $group = \App\Models\SeoKeywordGroup::create([
-                                    'site_id' => $site->id,
-                                    'group_name' => "AI Generated: " . $primaryModel->query_text,
-                                    'slug' => \Illuminate\Support\Str::slug("ai-generated-" . $primaryModel->query_text),
-                                    'primary_keyword_id' => $primaryModel->id,
-                                    'group_intent' => $primaryModel->intent ?: 'unknown',
-                                    'content_type' => 'blog_article',
-                                    'recommended_action' => 'create_new_page',
-                                    'status' => 'new',
-                                ]);
-
-                                foreach ($records as $kw) {
-                                    \App\Models\SeoKeywordGroupKeyword::create([
-                                        'group_id' => $group->id,
-                                        'keyword_id' => $kw->id,
-                                        'role' => $kw->id === $primaryModel->id ? 'primary' : 'secondary',
-                                    ]);
-                                }
-
-                                $generationService = app(\App\Services\SeoContentGenerationService::class);
-
-                                $brief = $generationService->generateBrief($group);
-
-                                $draft = $generationService->generateDraft($brief, [
-                                    'density' => $data['density'],
-                                    'length' => $data['length'],
-                                    'hint' => $data['hint'] ?? '',
-                                    'language' => $data['language'],
-                                ]);
-
-                                $generationService->reviewDraft($draft);
+                                $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                                $basePath = base_path();
+                                exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
 
                                 \Filament\Notifications\Notification::make()
-                                    ->title('Content generated successfully')
-                                    ->body('Draft generated for: ' . $group->group_name)
+                                    ->title('Content generation started')
+                                    ->body('The generation process has started in the background. You can check the Audit Logs or GSC Sites drafts list shortly.')
                                     ->success()
-                                    ->actions([
-                                        \Filament\Actions\Action::make('viewDraft')
-                                            ->label('View Draft')
-                                            ->url(\App\Filament\Resources\SeoContentDrafts\Pages\EditSeoContentDraft::getUrl(['record' => $draft->id])),
-                                    ])
                                     ->send();
 
                             } catch (\Exception $e) {

@@ -11,4 +11,9 @@ class SeoAuditLog extends Model
     protected $casts = [
         'context' => 'array',
     ];
+
+    public function site()
+    {
+        return $this->belongsTo(GscSite::class, 'site_id');
+    }
 }

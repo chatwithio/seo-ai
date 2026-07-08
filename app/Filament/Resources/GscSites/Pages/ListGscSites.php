@@ -21,11 +21,13 @@ class ListGscSites extends ListRecords
                 ->requiresConfirmation()
                 ->action(function () {
                     try {
-                        set_time_limit(1800);
-                        \Illuminate\Support\Facades\Artisan::call('seo:import-all-gsc');
+                        $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                        $basePath = base_path();
+                        exec("cd {$basePath} && {$php} artisan seo:import-all-gsc > /dev/null 2>&1 &");
+                        
                         \Filament\Notifications\Notification::make()
-                            ->title('Keyword import completed')
-                            ->body('Successfully imported and aggregated GSC keywords for the past 1 year across all active sites.')
+                            ->title('Keyword import started in background')
+                            ->body('The import process is running. You can continue working; keywords will update shortly.')
                             ->success()
                             ->send();
                     } catch (\Exception $e) {

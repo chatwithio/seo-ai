@@ -44,7 +44,7 @@ class SeoContentGenerationService
                 'primary_keyword' => $primaryKeyword,
                 'secondary_keywords' => json_encode(array_filter(array_map('trim', explode(',', $secondaryKeywords)))),
                 'faq_keywords' => json_encode($data['faq_keywords'] ?? []),
-                'search_intent' => $data['search_intent'] ?? $group->group_intent,
+                'search_intent' => \Illuminate\Support\Str::limit($data['search_intent'] ?? $group->group_intent, 250, ''),
                 'outline' => json_encode($data['outline'] ?? []),
                 'must_answer_questions' => json_encode($data['must_answer_questions'] ?? []),
                 'seo_notes' => json_encode(['notes' => $data['seo_notes'] ?? '']),

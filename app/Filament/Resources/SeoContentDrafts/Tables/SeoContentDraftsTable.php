@@ -14,12 +14,27 @@ class SeoContentDraftsTable
     {
         return $table
             ->columns([
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('brief.primary_keyword')
+                    ->label('Primary Keyword')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('group.group_name')
+                    ->label('Keyword Group')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('keyword_group_id')
                     ->numeric()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('brief_id')
                     ->numeric()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('title')
                     ->searchable(),
                 TextColumn::make('slug')
@@ -36,9 +51,9 @@ class SeoContentDraftsTable
                     ->dateTime()
                     ->sortable(),
                 TextColumn::make('created_at')
+                    ->label('Created At')
                     ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(),
                 TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
