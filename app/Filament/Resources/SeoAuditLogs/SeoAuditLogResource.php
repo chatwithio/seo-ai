@@ -89,4 +89,9 @@ class SeoAuditLogResource extends Resource
             'index' => ManageSeoAuditLogs::route('/'),
         ];
     }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id());
+    }
 }

@@ -17,6 +17,12 @@ class SeoKeyword extends Model
                 $keyword->query_hash = $normalizer->hash($keyword->normalized_query);
             }
         });
+
+        static::creating(function ($keyword) {
+            if (auth()->check() && !$keyword->user_id) {
+                $keyword->user_id = auth()->id();
+            }
+        });
     }
 
     public function site()

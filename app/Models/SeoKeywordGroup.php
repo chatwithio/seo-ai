@@ -8,6 +8,15 @@ class SeoKeywordGroup extends Model
 {
     protected $guarded = [];
 
+    protected static function booted()
+    {
+        static::creating(function ($group) {
+            if (auth()->check() && !$group->user_id) {
+                $group->user_id = auth()->id();
+            }
+        });
+    }
+
     public function keywords()
     {
         return $this->belongsToMany(SeoKeyword::class, 'seo_keyword_group_keywords', 'group_id', 'keyword_id')

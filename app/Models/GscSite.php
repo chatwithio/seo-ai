@@ -22,4 +22,18 @@ class GscSite extends Model
     {
         return $this->belongsTo(GoogleOauthToken::class, 'google_oauth_token_id');
     }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    protected static function booted()
+    {
+        static::creating(function ($site) {
+            if (auth()->check() && !$site->user_id) {
+                $site->user_id = auth()->id();
+            }
+        });
+    }
 }

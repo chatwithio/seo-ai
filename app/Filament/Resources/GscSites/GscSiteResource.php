@@ -45,4 +45,9 @@ class GscSiteResource extends Resource
             'edit' => EditGscSite::route('/{record}/edit'),
         ];
     }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id());
+    }
 }

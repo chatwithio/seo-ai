@@ -74,6 +74,7 @@ class ListGscSites extends ListRecords
                                     ['site_url' => $siteData['siteUrl']],
                                     [
                                         'google_oauth_token_id' => $tokenModel->id,
+                                        'user_id' => $tokenModel->user_id,
                                         'name' => parse_url($siteData['siteUrl'], PHP_URL_HOST) ?: $siteData['siteUrl'],
                                         'permission_level' => $siteData['permissionLevel'],
                                         'is_active' => true
