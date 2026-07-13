@@ -88,9 +88,7 @@ class ImportAllSearchConsoleKeywords extends Command
 
             $failedSites = 0;
 
-            $siteCount = $sites->count();
-
-            foreach ($sites->values() as $siteIndex => $site) {
+            foreach ($sites as $site) {
                 $this->info("Importing GSC data for site: {$site->site_url}");
 
                 SeoAuditLog::create([
@@ -197,13 +195,6 @@ class ImportAllSearchConsoleKeywords extends Command
                         'message' => $e->getMessage(),
                     ]);
                     $this->error("Import failed for site {$site->site_url}: ".$e->getMessage());
-                }
-
-                // TEMPORARY: keep multi-site imports visible on the Background
-                // Tasks page while per-user task tracking is being confirmed.
-                if ($siteIndex < $siteCount - 1) {
-                    $this->info('Waiting 60 seconds before importing the next site...');
-                    sleep(60);
                 }
             }
 
