@@ -40,8 +40,11 @@ class GoogleSearchConsoleService
 
         $httpClient = new \GuzzleHttp\Client([
             'handler' => $stack,
-            'timeout' => 15.0,
-            'connect_timeout' => 5.0,
+            // Search Console range queries can legitimately take longer than
+            // 15 seconds. The import runs in a killable background process, so
+            // do not impose a response timeout; only bound connection setup.
+            'timeout' => 0,
+            'connect_timeout' => 15.0,
         ]);
         $client->setHttpClient($httpClient);
 

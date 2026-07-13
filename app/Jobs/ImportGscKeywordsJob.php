@@ -22,7 +22,8 @@ class ImportGscKeywordsJob implements ShouldQueue
 
     public $tries = 3;
 
-    public $timeout = 1200;
+    // Allow large Search Console imports to run for up to one hour.
+    public $timeout = 3600;
 
     public function __construct($siteId, $date = null)
     {

@@ -28,10 +28,10 @@ class BackgroundTaskManager
             return $tasks;
         });
 
-        Cache::put($lockKey, [
+        Cache::forever($lockKey, [
             'pid' => getmypid(),
             'start_time' => time(),
-        ], 10800);
+        ]);
     }
 
     public static function unregister(string $lockKey): void
@@ -111,7 +111,7 @@ class BackgroundTaskManager
     {
         Cache::lock(self::$registryKey.':mutex', 10)->block(5, function () use ($callback) {
             $tasks = Cache::get(self::$registryKey, []);
-            Cache::put(self::$registryKey, $callback($tasks), 10800);
+            Cache::forever(self::$registryKey, $callback($tasks));
         });
     }
 }

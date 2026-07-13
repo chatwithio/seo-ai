@@ -40,14 +40,9 @@ class ImportAllSearchConsoleKeywords extends Command
             $startTime = $lockData['start_time'] ?? 0;
             $elapsed = time() - $startTime;
 
-            if ($elapsed > 10800) { // 3 hours
-                $this->warn("An old run (PID: {$pid}) has been running for {$elapsed} seconds (over 3 hours). Killing it and forcing lock release...");
-                BackgroundTaskManager::kill($lockKey);
-            } else {
-                $this->error("Another import process is already active (PID: {$pid}, running for {$elapsed} seconds). Exiting.");
+            $this->error("Another import process is already active (PID: {$pid}, running for {$elapsed} seconds). Use Background Tasks to terminate it if needed.");
 
-                return 1;
-            }
+            return 1;
         }
 
         // Acquire lock and register
