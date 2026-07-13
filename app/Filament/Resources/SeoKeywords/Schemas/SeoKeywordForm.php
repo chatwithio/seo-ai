@@ -4,8 +4,9 @@ namespace App\Filament\Resources\SeoKeywords\Schemas;
 
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 
 class SeoKeywordForm
 {
@@ -16,7 +17,11 @@ class SeoKeywordForm
                 Section::make('Keyword Information')
                     ->schema([
                         Select::make('site_id')
-                            ->relationship('site', 'site_url')
+                            ->relationship(
+                                'site',
+                                'site_url',
+                                modifyQueryUsing: fn (Builder $query) => $query->where('user_id', auth()->id()),
+                            )
                             ->label('Site')
                             ->required(),
                         TextInput::make('query_text')

@@ -4,8 +4,9 @@ namespace App\Filament\Resources\SeoKeywordGroups\Schemas;
 
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 
 class SeoKeywordGroupForm
 {
@@ -16,14 +17,22 @@ class SeoKeywordGroupForm
                 Section::make('Keyword Group Details')
                     ->schema([
                         Select::make('site_id')
-                            ->relationship('site', 'site_url')
+                            ->relationship(
+                                'site',
+                                'site_url',
+                                modifyQueryUsing: fn (Builder $query) => $query->where('user_id', auth()->id()),
+                            )
                             ->label('Site')
                             ->required(),
                         TextInput::make('group_name')
                             ->label('Group Name')
                             ->required(),
                         Select::make('primary_keyword_id')
-                            ->relationship('primaryKeyword', 'query_text')
+                            ->relationship(
+                                'primaryKeyword',
+                                'query_text',
+                                modifyQueryUsing: fn (Builder $query) => $query->where('user_id', auth()->id()),
+                            )
                             ->label('Primary Keyword'),
                         Select::make('status')
                             ->options([

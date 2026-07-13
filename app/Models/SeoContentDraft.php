@@ -11,8 +11,10 @@ class SeoContentDraft extends Model
     protected static function booted()
     {
         static::creating(function ($draft) {
-            if (auth()->check() && !$draft->user_id) {
-                $draft->user_id = auth()->id();
+            if (! $draft->user_id) {
+                $draft->user_id = $draft->keyword_group_id
+                    ? SeoKeywordGroup::whereKey($draft->keyword_group_id)->value('user_id')
+                    : auth()->id();
             }
         });
     }

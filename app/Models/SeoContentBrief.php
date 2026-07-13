@@ -11,8 +11,10 @@ class SeoContentBrief extends Model
     protected static function booted()
     {
         static::creating(function ($brief) {
-            if (auth()->check() && !$brief->user_id) {
-                $brief->user_id = auth()->id();
+            if (! $brief->user_id) {
+                $brief->user_id = $brief->keyword_group_id
+                    ? SeoKeywordGroup::whereKey($brief->keyword_group_id)->value('user_id')
+                    : auth()->id();
             }
         });
     }

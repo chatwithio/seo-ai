@@ -2,18 +2,21 @@
 
 namespace App\Console\Commands;
 
+use App\Models\SeoAuditLog;
 use App\Models\SeoKeyword;
 use App\Models\SeoKeywordGroup;
 use App\Models\SeoKeywordGroupKeyword;
-use App\Models\SeoAuditLog;
+use App\Services\BackgroundTaskManager;
 use App\Services\SeoContentGenerationService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Throwable;
 
 class GenerateBulkContent extends Command
 {
     protected $signature = 'seo:generate-content {--keyword-ids=} {--language=English} {--density=1.5} {--length=1000} {--hint=}';
+
     protected $description = 'Generate bulk content from a list of selected keyword IDs';
 
     public function handle(SeoContentGenerationService $generationService)
@@ -21,6 +24,7 @@ class GenerateBulkContent extends Command
         $keywordIdsStr = $this->option('keyword-ids');
         if (blank($keywordIdsStr)) {
             $this->error('No keyword IDs provided.');
+
             return 1;
         }
 
@@ -29,21 +33,23 @@ class GenerateBulkContent extends Command
 
         if ($keywords->isEmpty()) {
             $this->error('No valid keywords found for the provided IDs.');
+
             return 1;
         }
 
         $firstKeyword = $keywords->first();
         $site = $firstKeyword->site;
 
-        if (!$site) {
+        if (! $site) {
             $this->error('The selected keywords are not associated with a valid site.');
+
             return 1;
         }
 
         $primaryModel = $keywords->sortByDesc('total_clicks')->first();
 
-        $lockKey = 'seo:generate-content:lock:' . $primaryModel->id;
-        $lockData = \Illuminate\Support\Facades\Cache::get($lockKey);
+        $lockKey = 'seo:generate-content:lock:'.$primaryModel->id;
+        $lockData = Cache::get($lockKey);
 
         if ($lockData) {
             $pid = $lockData['pid'] ?? null;
@@ -52,22 +58,30 @@ class GenerateBulkContent extends Command
 
             if ($elapsed > 10800) { // 3 hours
                 $this->warn("An old run (PID: {$pid}) has been running for {$elapsed} seconds (over 3 hours). Killing it and forcing lock release...");
-                \App\Services\BackgroundTaskManager::kill($lockKey);
+                BackgroundTaskManager::kill($lockKey);
             } else {
                 $this->error("Another generation process for keyword '{$primaryModel->query_text}' is already active (PID: {$pid}). Exiting.");
+
                 return 1;
             }
         }
 
-        \App\Services\BackgroundTaskManager::register($lockKey, "Generate Content: " . $primaryModel->query_text, "seo:generate-content --keyword-ids={$keywordIdsStr}");
+        BackgroundTaskManager::register(
+            $lockKey,
+            'Generate Content: '.$primaryModel->query_text,
+            "seo:generate-content --keyword-ids={$keywordIdsStr}",
+            $site->user_id,
+            $site->id,
+        );
 
         $this->info("Starting bulk content generation for primary keyword: {$primaryModel->query_text}");
 
         try {
             $group = SeoKeywordGroup::create([
+                'user_id' => $site->user_id,
                 'site_id' => $site->id,
-                'group_name' => "AI Generated: " . $primaryModel->query_text,
-                'slug' => Str::slug("ai-generated-" . $primaryModel->query_text),
+                'group_name' => 'AI Generated: '.$primaryModel->query_text,
+                'slug' => Str::slug('ai-generated-'.$primaryModel->query_text),
                 'primary_keyword_id' => $primaryModel->id,
                 'group_intent' => $primaryModel->intent ?: 'unknown',
                 'content_type' => 'blog_article',
@@ -83,10 +97,10 @@ class GenerateBulkContent extends Command
                 ]);
             }
 
-            $this->info("Step 1: Generating brief...");
+            $this->info('Step 1: Generating brief...');
             $brief = $generationService->generateBrief($group);
 
-            $this->info("Step 2: Generating draft...");
+            $this->info('Step 2: Generating draft...');
             $draft = $generationService->generateDraft($brief, [
                 'density' => $this->option('density'),
                 'length' => $this->option('length'),
@@ -94,10 +108,11 @@ class GenerateBulkContent extends Command
                 'language' => $this->option('language'),
             ]);
 
-            $this->info("Step 3: Reviewing draft...");
+            $this->info('Step 3: Reviewing draft...');
             $generationService->reviewDraft($draft);
 
             SeoAuditLog::create([
+                'user_id' => $site->user_id,
                 'site_id' => $site->id,
                 'entity_type' => 'content_generation',
                 'action' => 'generated_successfully',
@@ -108,16 +123,18 @@ class GenerateBulkContent extends Command
                     'language' => $this->option('language'),
                     'density' => $this->option('density'),
                     'length' => $this->option('length'),
-                ]
+                ],
             ]);
 
             $this->info("Content generated successfully for draft ID: {$draft->id}");
+
             return 0;
 
         } catch (Throwable $e) {
-            $this->error("Generation failed: " . $e->getMessage());
+            $this->error('Generation failed: '.$e->getMessage());
 
             SeoAuditLog::create([
+                'user_id' => $site->user_id,
                 'site_id' => $site->id,
                 'entity_type' => 'content_generation',
                 'action' => 'generation_failed',
@@ -125,12 +142,12 @@ class GenerateBulkContent extends Command
                 'context' => [
                     'primary_keyword' => $primaryModel->query_text,
                     'keyword_ids' => $keywordIds,
-                ]
+                ],
             ]);
 
             return 1;
         } finally {
-            \App\Services\BackgroundTaskManager::unregister($lockKey);
+            BackgroundTaskManager::unregister($lockKey);
         }
     }
 }

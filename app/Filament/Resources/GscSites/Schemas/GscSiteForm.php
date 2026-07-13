@@ -3,12 +3,12 @@
 namespace App\Filament\Resources\GscSites\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Schema;
-
-use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 
 class GscSiteForm
 {
@@ -22,13 +22,17 @@ class GscSiteForm
                 TextInput::make('name'),
                 Select::make('google_oauth_token_id')
                     ->label('Google Account')
-                    ->relationship('googleOauthToken', 'email')
+                    ->relationship(
+                        'googleOauthToken',
+                        'email',
+                        modifyQueryUsing: fn (Builder $query) => $query->where('user_id', auth()->id()),
+                    )
                     ->placeholder('Select Google Account'),
                 TextInput::make('permission_level'),
                 Toggle::make('is_active')
                     ->required(),
                 DateTimePicker::make('last_imported_at'),
-                
+
                 Section::make('AI Agent Configuration')
                     ->description('Set up the targeting parameters for this Search Console property.')
                     ->schema([

@@ -2,13 +2,24 @@
 
 namespace App\Filament\Resources\SeoKeywords\Tables;
 
+use App\Models\GscSite;
+use App\Models\SeoKeyword;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Table;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Symfony\Component\Process\PhpExecutableFinder;
 
 class SeoKeywordsTable
 {
@@ -79,7 +90,11 @@ class SeoKeywordsTable
             ])
             ->filters([
                 SelectFilter::make('site_id')
-                    ->relationship('site', 'site_url')
+                    ->relationship(
+                        'site',
+                        'site_url',
+                        modifyQueryUsing: fn (Builder $query) => $query->where('user_id', auth()->id()),
+                    )
                     ->label('Site'),
                 SelectFilter::make('intent')
                     ->options([
@@ -92,67 +107,70 @@ class SeoKeywordsTable
                         'unknown' => 'Unknown',
                     ]),
                 Filter::make('has_clicks')
-                    ->query(fn($query) => $query->where('total_clicks', '>', 0))
+                    ->query(fn ($query) => $query->where('total_clicks', '>', 0))
                     ->label('Has Clicks'),
                 Filter::make('has_impressions')
-                    ->query(fn($query) => $query->where('total_impressions', '>', 0))
+                    ->query(fn ($query) => $query->where('total_impressions', '>', 0))
                     ->label('Has Impressions'),
             ])
             ->headerActions([
-                \Filament\Actions\Action::make('importAllKeywords')
+                Action::make('importAllKeywords')
                     ->label('Import Keywords')
                     ->icon('heroicon-o-cloud-arrow-down')
                     ->color('warning')
                     ->requiresConfirmation()
                     ->action(function () {
                         try {
-                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
-                            exec("cd {$basePath} && {$php} artisan seo:import-all-gsc > /dev/null 2>&1 &");
+                            $userId = (int) auth()->id();
+                            exec("cd {$basePath} && {$php} artisan seo:import-all-gsc --user-id={$userId} > /dev/null 2>&1 &");
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Keyword import started in background')
                                 ->body('The import process is running. You can continue working; keywords will update shortly.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Import failed')
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
-                \Filament\Actions\Action::make('groupKeywords')
+                Action::make('groupKeywords')
                     ->label('Auto Group Keywords')
                     ->icon('heroicon-o-cpu-chip')
                     ->color('success')
                     ->form([
-                        \Filament\Forms\Components\Select::make('site_id')
+                        Select::make('site_id')
                             ->label('Select Site')
-                            ->options(\App\Models\GscSite::pluck('site_url', 'id'))
+                            ->options(fn () => GscSite::where('user_id', auth()->id())->pluck('site_url', 'id'))
                             ->required(),
-                        \Filament\Forms\Components\TextInput::make('limit')
-                            ->label('Keywords Limit')
+                        TextInput::make('limit')
+                            ->label('Maximum Keywords Per AI Batch')
                             ->numeric()
                             ->default(50)
+                            ->minValue(1)
+                            ->maxValue(200)
                             ->required(),
                     ])
                     ->action(function (array $data) {
                         try {
-                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
                             $siteId = (int) $data['site_id'];
                             $limit = (int) $data['limit'];
                             exec("cd {$basePath} && {$php} artisan seo:group-keywords {$siteId} --limit={$limit} > /dev/null 2>&1 &");
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Keyword grouping started in background')
                                 ->body('The auto grouping process is running. Groups will appear shortly.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Grouping failed')
                                 ->body($e->getMessage())
                                 ->danger()
@@ -162,13 +180,13 @@ class SeoKeywordsTable
             ])
             ->actions([
                 EditAction::make(),
-                \Filament\Actions\Action::make('generateRowContent')
+                Action::make('generateRowContent')
                     ->label('Generate Content')
                     ->icon('heroicon-m-cpu-chip')
                     ->color('success')
                     ->button()
                     ->form([
-                        \Filament\Forms\Components\Select::make('language')
+                        Select::make('language')
                             ->label('Language')
                             ->options([
                                 'English' => 'English',
@@ -180,7 +198,7 @@ class SeoKeywordsTable
                             ])
                             ->default('English')
                             ->required(),
-                        \Filament\Forms\Components\Select::make('density')
+                        Select::make('density')
                             ->label('Keyword Repeat Density (%)')
                             ->options([
                                 '1' => '1%',
@@ -199,7 +217,7 @@ class SeoKeywordsTable
                             ])
                             ->default('1.5')
                             ->required(),
-                        \Filament\Forms\Components\Select::make('length')
+                        Select::make('length')
                             ->label('Article Length')
                             ->options([
                                 '500' => 'Short (~500 words)',
@@ -208,17 +226,17 @@ class SeoKeywordsTable
                             ])
                             ->default('1000')
                             ->required(),
-                        \Filament\Forms\Components\Textarea::make('hint')
+                        Textarea::make('hint')
                             ->label('Additional Hint / Context')
                             ->placeholder('e.g. Focus on product value, write in a casual tone')
                             ->rows(3),
                     ])
-                    ->action(function (\App\Models\SeoKeyword $record, array $data) {
+                    ->action(function (SeoKeyword $record, array $data) {
                         try {
                             $site = $record->site;
 
-                            if (!$site) {
-                                throw new \Exception("The selected keyword is not associated with a valid site.");
+                            if (! $site) {
+                                throw new \Exception('The selected keyword is not associated with a valid site.');
                             }
 
                             $keywordIds = $record->id;
@@ -227,18 +245,18 @@ class SeoKeywordsTable
                             $length = escapeshellarg($data['length']);
                             $hint = escapeshellarg($data['hint'] ?? '');
 
-                            $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                            $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
                             exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Content generation started')
                                 ->body('The generation process has started in the background. You can check the Audit Logs or GSC Sites drafts list shortly.')
                                 ->success()
                                 ->send();
 
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Content generation failed')
                                 ->body($e->getMessage())
                                 ->danger()
@@ -252,12 +270,12 @@ class SeoKeywordsTable
             ->bulkActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
-                    \Filament\Actions\BulkAction::make('generateContent')
+                    BulkAction::make('generateContent')
                         ->label('Generate Content')
                         ->icon('heroicon-o-cpu-chip')
                         ->color('success')
                         ->form([
-                            \Filament\Forms\Components\Select::make('language')
+                            Select::make('language')
                                 ->label('Language')
                                 ->options([
                                     'English' => 'English',
@@ -269,7 +287,7 @@ class SeoKeywordsTable
                                 ])
                                 ->default('English')
                                 ->required(),
-                            \Filament\Forms\Components\Select::make('density')
+                            Select::make('density')
                                 ->label('Keyword Repeat Density (%)')
                                 ->options([
                                     '1' => '1%',
@@ -289,7 +307,7 @@ class SeoKeywordsTable
                                 ])
                                 ->default('1.5')
                                 ->required(),
-                            \Filament\Forms\Components\Select::make('length')
+                            Select::make('length')
                                 ->label('Article Length')
                                 ->options([
                                     '500' => 'Short (~500 words)',
@@ -298,12 +316,12 @@ class SeoKeywordsTable
                                 ])
                                 ->default('1000')
                                 ->required(),
-                            \Filament\Forms\Components\Textarea::make('hint')
+                            Textarea::make('hint')
                                 ->label('Additional Hint / Context')
                                 ->placeholder('e.g. Focus on product value, write in a casual tone')
                                 ->rows(3),
                         ])
-                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                        ->action(function (Collection $records, array $data) {
                             if ($records->isEmpty()) {
                                 return;
                             }
@@ -312,8 +330,8 @@ class SeoKeywordsTable
                                 $firstKeyword = $records->first();
                                 $site = $firstKeyword->site;
 
-                                if (!$site) {
-                                    throw new \Exception("The selected keywords are not associated with a valid site.");
+                                if (! $site) {
+                                    throw new \Exception('The selected keywords are not associated with a valid site.');
                                 }
 
                                 $keywordIds = $records->pluck('id')->implode(',');
@@ -322,18 +340,18 @@ class SeoKeywordsTable
                                 $length = escapeshellarg($data['length']);
                                 $hint = escapeshellarg($data['hint'] ?? '');
 
-                                $php = (new \Symfony\Component\Process\PhpExecutableFinder())->find(false) ?: 'php';
+                                $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                                 $basePath = base_path();
                                 exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
 
-                                \Filament\Notifications\Notification::make()
+                                Notification::make()
                                     ->title('Content generation started')
                                     ->body('The generation process has started in the background. You can check the Audit Logs or GSC Sites drafts list shortly.')
                                     ->success()
                                     ->send();
 
                             } catch (\Exception $e) {
-                                \Filament\Notifications\Notification::make()
+                                Notification::make()
                                     ->title('Content generation failed')
                                     ->body($e->getMessage())
                                     ->danger()

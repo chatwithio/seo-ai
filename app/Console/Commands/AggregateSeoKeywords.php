@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\GscSite;
 use App\Models\GscKeywordMetric;
+use App\Models\GscSite;
 use App\Models\SeoKeyword;
 use App\Services\SeoKeywordNormalizer;
 use Illuminate\Console\Command;
@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 class AggregateSeoKeywords extends Command
 {
     protected $signature = 'seo:aggregate-keywords {site_id}';
+
     protected $description = 'Aggregate GSC keyword metrics into SEO Keywords table';
 
     public function handle(SeoKeywordNormalizer $normalizer)
@@ -40,6 +41,7 @@ class AggregateSeoKeywords extends Command
                     'query_hash' => $hash,
                 ],
                 [
+                    'user_id' => $site->user_id,
                     'query_text' => $metric->query_text,
                     'normalized_query' => $normalized,
                     'total_clicks' => $metric->total_clicks,
@@ -49,7 +51,7 @@ class AggregateSeoKeywords extends Command
                 ]
             );
             $count++;
-            
+
             if ($count % 1000 === 0) {
                 $this->info("Processed {$count} keywords...");
             }

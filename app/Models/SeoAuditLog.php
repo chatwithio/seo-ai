@@ -11,8 +11,10 @@ class SeoAuditLog extends Model
     protected static function booted()
     {
         static::creating(function ($log) {
-            if (auth()->check() && !$log->user_id) {
-                $log->user_id = auth()->id();
+            if (! $log->user_id) {
+                $log->user_id = $log->site_id
+                    ? GscSite::whereKey($log->site_id)->value('user_id')
+                    : auth()->id();
             }
         });
     }

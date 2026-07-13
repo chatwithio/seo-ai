@@ -11,8 +11,10 @@ class SeoKeywordGroup extends Model
     protected static function booted()
     {
         static::creating(function ($group) {
-            if (auth()->check() && !$group->user_id) {
-                $group->user_id = auth()->id();
+            if (! $group->user_id) {
+                $group->user_id = $group->site_id
+                    ? GscSite::whereKey($group->site_id)->value('user_id')
+                    : auth()->id();
             }
         });
     }

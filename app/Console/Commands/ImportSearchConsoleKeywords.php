@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\GscSite;
 use App\Models\GscKeywordMetric;
+use App\Models\GscSite;
 use App\Models\SeoAuditLog;
 use App\Services\GoogleSearchConsoleService;
 use Illuminate\Console\Command;
@@ -11,19 +11,21 @@ use Illuminate\Console\Command;
 class ImportSearchConsoleKeywords extends Command
 {
     protected $signature = 'seo:import-gsc {site_id} {--date=}';
+
     protected $description = 'Import keyword data from Google Search Console';
 
     public function handle(GoogleSearchConsoleService $gscService)
     {
         $siteId = $this->argument('site_id');
         $site = GscSite::findOrFail($siteId);
-        
+
         $delayDays = config('seo_agent.import_delay_days', 3);
         $date = $this->option('date') ?: now()->subDays($delayDays)->format('Y-m-d');
-        
+
         $this->info("Importing GSC data for site: {$site->site_url} on date: {$date}");
-        
+
         SeoAuditLog::create([
+            'user_id' => $site->user_id,
             'site_id' => $site->id,
             'entity_type' => 'gsc_import',
             'action' => 'gsc_import_started',
@@ -35,6 +37,10 @@ class ImportSearchConsoleKeywords extends Command
         $totalImported = 0;
 
         try {
+            if (! $site->googleOauthToken) {
+                throw new \Exception('No connected Google Account token found for site.');
+            }
+
             while (true) {
                 $this->info("Fetching rows starting at {$startRow}...");
                 $rows = $gscService->fetchSearchAnalyticsRows(
@@ -44,7 +50,7 @@ class ImportSearchConsoleKeywords extends Command
                     $rowLimit,
                     $site->googleOauthToken
                 );
-                
+
                 if (empty($rows)) {
                     break;
                 }
@@ -73,15 +79,16 @@ class ImportSearchConsoleKeywords extends Command
                 $fetched = count($rows);
                 $totalImported += $fetched;
                 $startRow += $fetched;
-                
+
                 if ($fetched < $rowLimit) {
                     break;
                 }
             }
-            
+
             $site->update(['last_imported_at' => now()]);
 
             SeoAuditLog::create([
+                'user_id' => $site->user_id,
                 'site_id' => $site->id,
                 'entity_type' => 'gsc_import',
                 'action' => 'gsc_import_finished',
@@ -89,15 +96,20 @@ class ImportSearchConsoleKeywords extends Command
             ]);
 
             $this->info("Successfully imported {$totalImported} rows.");
-            
+
+            return 0;
+
         } catch (\Exception $e) {
             SeoAuditLog::create([
+                'user_id' => $site->user_id,
                 'site_id' => $site->id,
                 'entity_type' => 'gsc_import',
                 'action' => 'gsc_import_failed',
                 'message' => $e->getMessage(),
             ]);
-            $this->error("Import failed: " . $e->getMessage());
+            $this->error('Import failed: '.$e->getMessage());
+
+            return 1;
         }
     }
 }

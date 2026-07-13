@@ -2,26 +2,35 @@
 
 namespace App\Console\Commands;
 
-use App\Models\GscSite;
 use App\Models\GscKeywordMetric;
+use App\Models\GscSite;
 use App\Models\SeoKeyword;
 use App\Models\SeoKeywordGroup;
 use App\Models\SeoKeywordGroupKeyword;
+use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 
 class ImportTestKeywords extends Command
 {
-    protected $signature = 'seo:import-test-keywords';
+    protected $signature = 'seo:import-test-keywords {--user-id= : Owner of the test sites and generated SEO data}';
+
     protected $description = 'Import test keywords from the provided screenshots for cachimba-planet.com and alzado.org';
 
     public function handle()
     {
-        $this->info("Starting test keyword import...");
+        $userId = (int) $this->option('user-id');
+        if (! $userId || ! User::whereKey($userId)->exists()) {
+            $this->error('A valid --user-id is required.');
+
+            return 1;
+        }
+
+        $this->info('Starting test keyword import...');
 
         // 1. Cachimba Planet
         $cachimbaSite = GscSite::updateOrCreate(
-            ['site_url' => 'https://cachimba-planet.com/'],
+            ['user_id' => $userId, 'site_url' => 'https://cachimba-planet.com/'],
             [
                 'name' => 'Cachimba Planet',
                 'permission_level' => 'siteOwner',
@@ -56,7 +65,7 @@ class ImportTestKeywords extends Command
 
         // 2. Alzado
         $alzadoSite = GscSite::updateOrCreate(
-            ['site_url' => 'https://alzado.org/'],
+            ['user_id' => $userId, 'site_url' => 'https://alzado.org/'],
             [
                 'name' => 'Alzado',
                 'permission_level' => 'siteOwner',
@@ -88,20 +97,21 @@ class ImportTestKeywords extends Command
         $this->insertMetrics($alzadoSite->id, $alzadoKeywords, 'https://alzado.org/');
 
         // Run aggregation for both sites
-        $this->info("Aggregating keywords for Cachimba Planet...");
+        $this->info('Aggregating keywords for Cachimba Planet...');
         Artisan::call('seo:aggregate-keywords', ['site_id' => $cachimbaSite->id], $this->output);
 
-        $this->info("Aggregating keywords for Alzado...");
+        $this->info('Aggregating keywords for Alzado...');
         Artisan::call('seo:aggregate-keywords', ['site_id' => $alzadoSite->id], $this->output);
 
-        $this->info("Test keywords successfully imported and aggregated!");
+        $this->info('Test keywords successfully imported and aggregated!');
+
         return 0;
     }
 
     private function cleanSiteData(int $siteId)
     {
         $this->info("Cleaning up existing GSC data for site ID: {$siteId}...");
-        
+
         // Remove keyword group mappings and groups
         $groupIds = SeoKeywordGroup::where('site_id', $siteId)->pluck('id');
         SeoKeywordGroupKeyword::whereIn('group_id', $groupIds)->delete();
@@ -115,10 +125,10 @@ class ImportTestKeywords extends Command
     private function insertMetrics(int $siteId, array $keywords, string $pageUrl)
     {
         $reportDate = '2026-07-03';
-        
+
         foreach ($keywords as $kw) {
             $ctr = $kw['impressions'] > 0 ? ($kw['clicks'] / $kw['impressions']) * 100 : 0.0;
-            
+
             GscKeywordMetric::create([
                 'site_id' => $siteId,
                 'report_date' => $reportDate,

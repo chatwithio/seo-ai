@@ -2,12 +2,17 @@
 
 namespace App\Filament\Resources\GscSites\Tables;
 
+use App\Models\GscSite;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Artisan;
 
 class GscSitesTable
 {
@@ -44,70 +49,75 @@ class GscSitesTable
             ])
             ->actions([
                 EditAction::make(),
-                \Filament\Actions\Action::make('importKeywords')
+                Action::make('importKeywords')
                     ->label('Import Keywords')
                     ->icon('heroicon-o-cloud-arrow-down')
                     ->color('warning')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('date')
+                        DatePicker::make('date')
                             ->label('Date')
                             ->default(now()->subDays(3)->format('Y-m-d'))
-                            ->required()
+                            ->required(),
                     ])
-                    ->action(function (\App\Models\GscSite $record, array $data) {
+                    ->action(function (GscSite $record, array $data) {
                         try {
                             set_time_limit(300);
-                            \Illuminate\Support\Facades\Artisan::call('seo:import-gsc', [
+                            $exitCode = Artisan::call('seo:import-gsc', [
                                 'site_id' => $record->id,
-                                '--date' => $data['date']
+                                '--date' => $data['date'],
                             ]);
-                            \Filament\Notifications\Notification::make()
+
+                            if ($exitCode !== 0) {
+                                throw new \RuntimeException(trim(Artisan::output()) ?: 'Import failed.');
+                            }
+
+                            Notification::make()
                                 ->title('Import completed successfully')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Import failed')
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
-                \Filament\Actions\Action::make('aggregateKeywords')
+                Action::make('aggregateKeywords')
                     ->label('Aggregate Keywords')
                     ->icon('heroicon-o-circle-stack')
                     ->color('info')
-                    ->action(function (\App\Models\GscSite $record) {
+                    ->action(function (GscSite $record) {
                         try {
-                            \Illuminate\Support\Facades\Artisan::call('seo:aggregate-keywords', ['site_id' => $record->id]);
-                            \Filament\Notifications\Notification::make()
+                            Artisan::call('seo:aggregate-keywords', ['site_id' => $record->id]);
+                            Notification::make()
                                 ->title('Keywords aggregated successfully')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Aggregation failed')
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
-                \Filament\Actions\Action::make('runAgent')
+                Action::make('runAgent')
                     ->label('Run Agent')
                     ->icon('heroicon-o-cpu-chip')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->action(function (\App\Models\GscSite $record) {
+                    ->action(function (GscSite $record) {
                         try {
                             set_time_limit(600);
-                            \Illuminate\Support\Facades\Artisan::call('seo:run-agent', ['site_id' => $record->id]);
-                            \Filament\Notifications\Notification::make()
+                            Artisan::call('seo:run-agent', ['site_id' => $record->id]);
+                            Notification::make()
                                 ->title('Agent execution completed')
                                 ->body('The AI Agent has completed the keyword grouping and content draft generation cycle.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Agent failed')
                                 ->body($e->getMessage())
                                 ->danger()

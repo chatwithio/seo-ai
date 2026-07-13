@@ -2,9 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\GscSite;
+use App\Models\SeoKeyword;
+use App\Services\BackgroundTaskManager;
+use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use UnitEnum;
-use BackedEnum;
 
 class BackgroundTasks extends Page
 {
@@ -20,43 +24,76 @@ class BackgroundTasks extends Page
 
     public function getActiveTasks(): array
     {
-        $allTasks = \App\Services\BackgroundTaskManager::listActive();
-        $userSiteIds = \App\Models\GscSite::where('user_id', auth()->id())->pluck('id')->toArray();
-        
+        $userId = (int) auth()->id();
+        $allTasks = BackgroundTaskManager::listActive();
+        $userSiteIds = GscSite::where('user_id', $userId)->pluck('id')->toArray();
+
         $filtered = [];
         foreach ($allTasks as $lockKey => $task) {
+            // New tasks carry explicit ownership and do not need fragile
+            // command-string parsing.
+            if (array_key_exists('user_id', $task) && $task['user_id'] !== null) {
+                if ((int) $task['user_id'] === $userId) {
+                    $filtered[$lockKey] = $task;
+                }
+
+                continue;
+            }
+
+            // Keep compatibility with tasks registered before ownership
+            // metadata was added.
             $command = $task['command'] ?? '';
-            
+
             // Filter by site grouping command
             if (preg_match('/seo:group-keywords\s+(\d+)/', $command, $matches)) {
                 $siteId = (int) $matches[1];
-                if (!in_array($siteId, $userSiteIds)) {
+                if (! in_array($siteId, $userSiteIds, true)) {
                     continue;
                 }
             }
-            
+
+            if (preg_match('/--site-id=(\d+)/', $command, $matches)) {
+                $siteId = (int) $matches[1];
+                if (! in_array($siteId, $userSiteIds, true)) {
+                    continue;
+                }
+            }
+
+            if (preg_match('/--user-id=(\d+)/', $command, $matches) && (int) $matches[1] !== $userId) {
+                continue;
+            }
+
             // Filter by content generation command
             if (preg_match('/--keyword-ids=([0-9,]+)/', $command, $matches)) {
                 $kwIds = explode(',', $matches[1]);
-                $hasAccess = \App\Models\SeoKeyword::whereIn('id', $kwIds)
+                $hasAccess = SeoKeyword::whereIn('id', $kwIds)
                     ->whereIn('site_id', $userSiteIds)
                     ->exists();
-                if (!$hasAccess) {
+                if (! $hasAccess) {
                     continue;
                 }
             }
-            
+
             $filtered[$lockKey] = $task;
         }
-        
+
         return $filtered;
     }
 
     public function killTask(string $lockKey)
     {
-        \App\Services\BackgroundTaskManager::kill($lockKey);
+        if (! array_key_exists($lockKey, $this->getActiveTasks())) {
+            Notification::make()
+                ->title('Task is no longer running')
+                ->warning()
+                ->send();
 
-        \Filament\Notifications\Notification::make()
+            return;
+        }
+
+        BackgroundTaskManager::kill($lockKey);
+
+        Notification::make()
             ->title('Task terminated successfully')
             ->body('The process has been killed and the cache lock released.')
             ->success()
