@@ -2,14 +2,19 @@
 
 namespace App\Filament\Pages;
 
-use Filament\Pages\Dashboard as BaseDashboard;
 use App\Models\GoogleOauthToken;
 use App\Models\SeoContentDraft;
 use App\Models\SeoKeyword;
+use Filament\Notifications\Notification;
+use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
 
 class Dashboard extends BaseDashboard
 {
+    protected static ?string $navigationLabel = 'Dashboard';
+
+    protected static ?int $navigationSort = 1;
+
     protected string $view = 'filament.pages.dashboard';
 
     public function getTokens()
@@ -29,15 +34,15 @@ class Dashboard extends BaseDashboard
         return SeoKeyword::whereHas('site', function ($q) {
             $q->where('user_id', Auth::id());
         })->where('total_impressions', '>', 50)
-          ->where('total_clicks', '<', 3)
-          ->count();
+            ->where('total_clicks', '<', 3)
+            ->count();
     }
 
     public function deleteToken(int $id)
     {
         GoogleOauthToken::where('user_id', Auth::id())->where('id', $id)->delete();
 
-        \Filament\Notifications\Notification::make()
+        Notification::make()
             ->title('Google account disconnected successfully')
             ->success()
             ->send();

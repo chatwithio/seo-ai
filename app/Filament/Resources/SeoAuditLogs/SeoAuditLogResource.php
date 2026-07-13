@@ -4,12 +4,12 @@ namespace App\Filament\Resources\SeoAuditLogs;
 
 use App\Filament\Resources\SeoAuditLogs\Pages\ManageSeoAuditLogs;
 use App\Models\SeoAuditLog;
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use BackedEnum;
-use UnitEnum;
+use Illuminate\Database\Eloquent\Builder;
 
 class SeoAuditLogResource extends Resource
 {
@@ -19,11 +19,9 @@ class SeoAuditLogResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'id';
 
-    protected static ?string $navigationLabel = 'Audit Logs';
+    protected static ?string $navigationLabel = 'Activity Log';
 
-    protected static string|UnitEnum|null $navigationGroup = 'SEO Agent';
-
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 9;
 
     public static function form(Schema $schema): Schema
     {
@@ -90,7 +88,7 @@ class SeoAuditLogResource extends Resource
         ];
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->where('user_id', auth()->id());
     }

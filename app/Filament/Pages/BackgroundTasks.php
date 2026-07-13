@@ -8,17 +8,14 @@ use App\Services\BackgroundTaskManager;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use UnitEnum;
 
 class BackgroundTasks extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-cpu-chip';
 
-    protected static ?string $navigationLabel = 'Background Tasks';
+    protected static ?string $navigationLabel = 'Active Jobs';
 
-    protected static string|UnitEnum|null $navigationGroup = 'SEO Agent';
-
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 8;
 
     protected string $view = 'filament.pages.background-tasks';
 

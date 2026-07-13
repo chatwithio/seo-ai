@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\GoogleOauthTokens;
 
-use App\Filament\Resources\GoogleOauthTokens\Pages\CreateGoogleOauthToken;
-use App\Filament\Resources\GoogleOauthTokens\Pages\EditGoogleOauthToken;
 use App\Filament\Resources\GoogleOauthTokens\Pages\ListGoogleOauthTokens;
 use App\Filament\Resources\GoogleOauthTokens\Schemas\GoogleOauthTokenForm;
 use App\Filament\Resources\GoogleOauthTokens\Tables\GoogleOauthTokensTable;
@@ -13,13 +11,18 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class GoogleOauthTokenResource extends Resource
 {
     protected static ?string $model = GoogleOauthToken::class;
 
-    protected static ?string $navigationLabel = 'Google Accounts';
+    protected static ?string $navigationLabel = 'Google Connections';
+
+    protected static ?int $navigationSort = 2;
+
     protected static ?string $pluralModelLabel = 'Google Accounts';
+
     protected static ?string $modelLabel = 'Google Account';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
@@ -48,7 +51,7 @@ class GoogleOauthTokenResource extends Resource
         ];
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->where('user_id', auth()->id());
     }

@@ -18,6 +18,10 @@ class AiPromptResource extends Resource
 {
     protected static ?string $model = AiPrompt::class;
 
+    protected static ?string $navigationLabel = 'AI Instructions';
+
+    protected static ?int $navigationSort = 10;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
