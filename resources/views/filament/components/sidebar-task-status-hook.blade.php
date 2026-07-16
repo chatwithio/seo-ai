@@ -1,0 +1,1 @@
+<livewire:sidebar-task-status />
