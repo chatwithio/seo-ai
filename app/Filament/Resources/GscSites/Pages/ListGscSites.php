@@ -4,10 +4,8 @@ namespace App\Filament\Resources\GscSites\Pages;
 
 use App\Filament\Resources\GscSites\GscSiteResource;
 use App\Models\GoogleOauthToken;
-use App\Models\GscSite;
-use App\Services\GoogleSearchConsoleService;
+use App\Services\BackgroundTaskManager;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Symfony\Component\Process\PhpExecutableFinder;
@@ -19,22 +17,28 @@ class ListGscSites extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
             Action::make('importAllKeywords')
-                ->label('Import Keywords')
+                ->label(function (): string {
+                    $task = BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Import GSC Keywords');
+
+                    return $task
+                        ? 'Importing Keywords — '.($task['progress_percent'] ?? 0).'%'
+                        : 'Import Keywords';
+                })
                 ->icon('heroicon-o-cloud-arrow-down')
                 ->color('warning')
+                ->disabled(fn (): bool => BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Import GSC Keywords') !== null)
                 ->requiresConfirmation()
                 ->action(function () {
                     try {
                         $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                         $basePath = base_path();
                         $userId = (int) auth()->id();
-                        exec("cd {$basePath} && {$php} artisan seo:import-all-gsc --user-id={$userId} > /dev/null 2>&1 &");
+                        exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:import-all-gsc --user-id={$userId} > /dev/null 2>&1 &");
 
                         Notification::make()
                             ->title('Keyword import started in background')
-                            ->body('The import process is running. You can continue working; keywords will update shortly.')
+                            ->body('Importing the latest keyword data. This button and Active Jobs will show progress, and the keyword table refreshes automatically.')
                             ->success()
                             ->send();
                     } catch (\Exception $e) {
@@ -51,15 +55,25 @@ class ListGscSites extends ListRecords
                 ->color('success')
                 ->url('/google/connect'),
             Action::make('syncSites')
-                ->label('Sync Sites from Google')
+                ->label(function (): string {
+                    $task = BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Sync Google Sites');
+
+                    if (! $task) {
+                        return 'Sync Sites from Google';
+                    }
+
+                    return 'Connecting Sites — '.($task['progress_percent'] ?? 0).'%';
+                })
                 ->icon('heroicon-o-arrow-path')
                 ->color('primary')
+                ->disabled(fn (): bool => BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Sync Google Sites') !== null)
                 ->action(function () {
                     $userId = (int) auth()->id();
-                    $tokens = GoogleOauthToken::where('provider', 'google')
+                    $hasTokens = GoogleOauthToken::where('provider', 'google')
                         ->where('user_id', $userId)
-                        ->get();
-                    if ($tokens->isEmpty()) {
+                        ->exists();
+
+                    if (! $hasTokens) {
                         Notification::make()
                             ->title('No Google Accounts Connected')
                             ->body('Please connect at least one Google account first.')
@@ -69,49 +83,21 @@ class ListGscSites extends ListRecords
                         return;
                     }
 
-                    $service = app(GoogleSearchConsoleService::class);
-                    $syncedCount = 0;
-                    $errors = [];
+                    try {
+                        $php = (new PhpExecutableFinder)->find(false) ?: 'php';
+                        $basePath = base_path();
+                        exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:sync-gsc-sites --user-id={$userId} > /dev/null 2>&1 &");
 
-                    foreach ($tokens as $tokenModel) {
-                        try {
-                            if (! str_contains($tokenModel->scope ?? '', 'https://www.googleapis.com/auth/webmasters.readonly')) {
-                                $errors[] = "Account ({$tokenModel->email}) does not have Search Console permission enabled. Please delete and reconnect it, ensuring the permissions checkbox is checked.";
-
-                                continue;
-                            }
-                            $sites = $service->listSites($tokenModel);
-                            foreach ($sites as $siteData) {
-                                GscSite::updateOrCreate(
-                                    [
-                                        'user_id' => $userId,
-                                        'site_url' => $siteData['siteUrl'],
-                                    ],
-                                    [
-                                        'google_oauth_token_id' => $tokenModel->id,
-                                        'name' => parse_url($siteData['siteUrl'], PHP_URL_HOST) ?: $siteData['siteUrl'],
-                                        'permission_level' => $siteData['permissionLevel'],
-                                        'is_active' => true,
-                                    ]
-                                );
-                                $syncedCount++;
-                            }
-                        } catch (\Exception $e) {
-                            $errors[] = "Account ({$tokenModel->email}): ".$e->getMessage();
-                        }
-                    }
-
-                    if (! empty($errors)) {
                         Notification::make()
-                            ->title('Sites synced with errors')
-                            ->body('Successfully synced '.$syncedCount.' sites. Errors: '.implode(' | ', $errors))
-                            ->warning()
-                            ->send();
-                    } else {
-                        Notification::make()
-                            ->title('Sites synced successfully')
-                            ->body('Synced '.$syncedCount.' sites from your connected Google accounts.')
+                            ->title('Connecting your sites...')
+                            ->body('Google Search Console is loading in the background. The progress button updates automatically as sites appear.')
                             ->success()
+                            ->send();
+                    } catch (\Throwable $exception) {
+                        Notification::make()
+                            ->title('Could not start site sync')
+                            ->body($exception->getMessage())
+                            ->danger()
                             ->send();
                     }
                 }),

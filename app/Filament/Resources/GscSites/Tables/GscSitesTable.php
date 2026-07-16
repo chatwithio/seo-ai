@@ -7,7 +7,6 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -19,6 +18,7 @@ class GscSitesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->poll('3s')
             ->columns([
                 TextColumn::make('site_url')
                     ->searchable(),
@@ -49,59 +49,6 @@ class GscSitesTable
             ])
             ->actions([
                 EditAction::make(),
-                Action::make('importKeywords')
-                    ->label('Import Keywords')
-                    ->icon('heroicon-o-cloud-arrow-down')
-                    ->color('warning')
-                    ->form([
-                        DatePicker::make('date')
-                            ->label('Date')
-                            ->default(now()->subDays(3)->format('Y-m-d'))
-                            ->required(),
-                    ])
-                    ->action(function (GscSite $record, array $data) {
-                        try {
-                            set_time_limit(300);
-                            $exitCode = Artisan::call('seo:import-gsc', [
-                                'site_id' => $record->id,
-                                '--date' => $data['date'],
-                            ]);
-
-                            if ($exitCode !== 0) {
-                                throw new \RuntimeException(trim(Artisan::output()) ?: 'Import failed.');
-                            }
-
-                            Notification::make()
-                                ->title('Import completed successfully')
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Import failed')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
-                Action::make('aggregateKeywords')
-                    ->label('Aggregate Keywords')
-                    ->icon('heroicon-o-circle-stack')
-                    ->color('info')
-                    ->action(function (GscSite $record) {
-                        try {
-                            Artisan::call('seo:aggregate-keywords', ['site_id' => $record->id]);
-                            Notification::make()
-                                ->title('Keywords aggregated successfully')
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Aggregation failed')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
                 Action::make('runAgent')
                     ->label('Run Agent')
                     ->icon('heroicon-o-cpu-chip')

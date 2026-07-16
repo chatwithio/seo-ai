@@ -33,6 +33,7 @@
                             <tr>
                                 <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Task Name</th>
                                 <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Command</th>
+                                <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Progress</th>
                                 <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Process ID</th>
                                 <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Started</th>
                                 <th scope="col" class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Elapsed Time</th>
@@ -44,6 +45,7 @@
                                 @php
                                     $elapsedSec = time() - $task['start_time'];
                                     $elapsedMin = round($elapsedSec / 60);
+                                    $progressPercent = max(0, min(100, (int) ($task['progress_percent'] ?? 0)));
                                     
                                     if ($elapsedMin < 1) {
                                         $elapsedText = 'Just now';
@@ -61,6 +63,27 @@
                                         <code class="rounded bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800 dark:text-gray-300">
                                             {{ $task['command'] }}
                                         </code>
+                                    </td>
+                                    <td class="bg-white px-6 py-5 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400" style="min-width: 16rem;">
+                                        <div class="mb-2 flex items-center justify-between gap-3">
+                                            <span>{{ $task['status_text'] ?? 'Running...' }}</span>
+                                            @if (isset($task['progress_total']))
+                                                <strong class="text-gray-700 dark:text-gray-200">{{ $progressPercent }}%</strong>
+                                            @endif
+                                        </div>
+                                        @if (isset($task['progress_total']))
+                                            <div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                                <div class="h-full rounded-full bg-primary-600 transition-all duration-500" style="width: {{ $progressPercent }}%;"></div>
+                                            </div>
+                                            <div class="mt-2 text-xs text-gray-400">
+                                                {{ $task['progress_current'] ?? 0 }} of {{ $task['progress_total'] }}
+                                                @if (! empty($task['imported_rows']))
+                                                    · {{ number_format($task['imported_rows']) }} rows received
+                                                @elseif (! empty($task['synced_count']))
+                                                    · {{ number_format($task['synced_count']) }} sites found
+                                                @endif
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="bg-white px-6 py-5 whitespace-nowrap text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400 text-center">
                                         <span class="inline-flex items-center rounded-md bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 dark:bg-gray-400/10 dark:text-gray-400 dark:ring-gray-400/20">

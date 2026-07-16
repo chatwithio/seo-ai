@@ -74,6 +74,14 @@ class ImportAllSearchConsoleKeywords extends Command
                 return 0;
             }
 
+            BackgroundTaskManager::update($lockKey, [
+                'status_text' => 'Preparing the latest Search Console data...',
+                'progress_current' => 0,
+                'progress_total' => $sites->count(),
+                'progress_percent' => 0,
+                'imported_rows' => 0,
+            ]);
+
             $startDate = now()->subYear()->format('Y-m-d');
             $endDate = now()->subDays(3)->format('Y-m-d');
             // We use a fixed report date for this 1-year aggregated import to prevent duplicate records
@@ -83,8 +91,17 @@ class ImportAllSearchConsoleKeywords extends Command
 
             $failedSites = 0;
 
-            foreach ($sites as $site) {
+            $allSitesImportedRows = 0;
+
+            foreach ($sites as $siteIndex => $site) {
                 $this->info("Importing GSC data for site: {$site->site_url}");
+
+                BackgroundTaskManager::update($lockKey, [
+                    'status_text' => 'Importing '.($site->name ?: $site->site_url),
+                    'progress_current' => $siteIndex,
+                    'current_site' => $site->site_url,
+                    'progress_percent' => (int) floor(($siteIndex / $sites->count()) * 100),
+                ]);
 
                 SeoAuditLog::create([
                     'user_id' => $site->user_id,
@@ -128,6 +145,11 @@ class ImportAllSearchConsoleKeywords extends Command
                         $totalImported += $fetched;
                         $startRow += $fetched;
 
+                        BackgroundTaskManager::update($lockKey, [
+                            'status_text' => 'Importing '.($site->name ?: $site->site_url)." — {$totalImported} rows received",
+                            'imported_rows' => $allSitesImportedRows + $totalImported,
+                        ]);
+
                         if ($fetched < $rowLimit) {
                             break;
                         }
@@ -141,30 +163,39 @@ class ImportAllSearchConsoleKeywords extends Command
                             ->where('report_date', $reportDate)
                             ->delete();
 
-                        foreach ($allRows as $row) {
-                            GscKeywordMetric::updateOrInsert(
-                                [
+                        $timestamp = now();
+
+                        foreach (array_chunk($allRows, 1000) as $rows) {
+                            $records = array_map(
+                                fn (array $row): array => [
                                     'site_id' => $site->id,
                                     'report_date' => $reportDate,
                                     'query_text' => substr($row['query'], 0, 191),
                                     'page_url' => substr($row['page'], 0, 191),
                                     'country' => $row['country'],
                                     'device' => $row['device'],
-                                ],
-                                [
                                     'clicks' => $row['clicks'],
                                     'impressions' => $row['impressions'],
                                     'ctr' => $row['ctr'],
                                     'position' => $row['position'],
-                                    'imported_at' => now(),
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ]
+                                    'imported_at' => $timestamp,
+                                    'created_at' => $timestamp,
+                                    'updated_at' => $timestamp,
+                                ],
+                                $rows,
+                            );
+
+                            GscKeywordMetric::upsert(
+                                $records,
+                                ['site_id', 'report_date', 'query_text', 'page_url', 'country', 'device'],
+                                ['clicks', 'impressions', 'ctr', 'position', 'imported_at', 'updated_at'],
                             );
                         }
                     });
 
                     $site->update(['last_imported_at' => now()]);
+
+                    $allSitesImportedRows += $totalImported;
 
                     // Automatically trigger aggregation to update seo_keywords table
                     $this->info('Aggregating keywords into SEO Keywords table...');
@@ -191,6 +222,14 @@ class ImportAllSearchConsoleKeywords extends Command
                     ]);
                     $this->error("Import failed for site {$site->site_url}: ".$e->getMessage());
                 }
+
+                BackgroundTaskManager::update($lockKey, [
+                    'status_text' => 'Completed '.($siteIndex + 1).' of '.$sites->count().' sites',
+                    'progress_current' => $siteIndex + 1,
+                    'progress_percent' => (int) floor((($siteIndex + 1) / $sites->count()) * 100),
+                    'imported_rows' => $allSitesImportedRows,
+                    'failed_sites' => $failedSites,
+                ]);
             }
 
             if ($failedSites > 0) {

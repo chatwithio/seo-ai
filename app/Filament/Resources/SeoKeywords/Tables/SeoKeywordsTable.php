@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SeoKeywords\Tables;
 
 use App\Models\GscSite;
 use App\Models\SeoKeyword;
+use App\Services\BackgroundTaskManager;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -26,6 +27,7 @@ class SeoKeywordsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->poll('3s')
             ->defaultSort('total_clicks', 'desc')
             ->columns([
                 TextColumn::make('query_text')
@@ -47,6 +49,22 @@ class SeoKeywordsTable
                 TextColumn::make('avg_position')
                     ->label('Position')
                     ->numeric(1)
+                    ->sortable(),
+                TextColumn::make('content_generation_status')
+                    ->label('Content')
+                    ->badge()
+                    ->formatStateUsing(fn (int $state): string => match ($state) {
+                        SeoKeyword::CONTENT_GENERATING => 'Generating',
+                        SeoKeyword::CONTENT_COMPLETED => 'Created',
+                        SeoKeyword::CONTENT_FAILED => 'Failed',
+                        default => 'Ready',
+                    })
+                    ->color(fn (int $state): string => match ($state) {
+                        SeoKeyword::CONTENT_GENERATING => 'warning',
+                        SeoKeyword::CONTENT_COMPLETED => 'success',
+                        SeoKeyword::CONTENT_FAILED => 'danger',
+                        default => 'gray',
+                    })
                     ->sortable(),
                 TextColumn::make('site.site_url')
                     ->label('Site')
@@ -112,23 +130,43 @@ class SeoKeywordsTable
                 Filter::make('has_impressions')
                     ->query(fn ($query) => $query->where('total_impressions', '>', 0))
                     ->label('Has Impressions'),
+                Filter::make('top_impressions')
+                    ->query(fn (Builder $query): Builder => $query
+                        ->topByImpressionsForUser((int) auth()->id()))
+                    ->label('Top Impressions'),
+                Filter::make('opportunities')
+                    ->query(fn (Builder $query): Builder => $query
+                        ->contentOpportunitiesForUser((int) auth()->id()))
+                    ->label('High Impressions, Low Clicks'),
             ])
+            ->filtersRemoveAllAction(fn (Action $action): Action => $action
+                ->label('Clear all filters')
+                ->icon('heroicon-o-x-mark')
+                ->color('gray')
+                ->button())
             ->headerActions([
                 Action::make('importAllKeywords')
-                    ->label('Import Keywords')
+                    ->label(function (): string {
+                        $task = BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Import GSC Keywords');
+
+                        return $task
+                            ? 'Importing Keywords — '.($task['progress_percent'] ?? 0).'%'
+                            : 'Import Keywords';
+                    })
                     ->icon('heroicon-o-cloud-arrow-down')
                     ->color('warning')
+                    ->disabled(fn (): bool => BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Import GSC Keywords') !== null)
                     ->requiresConfirmation()
                     ->action(function () {
                         try {
                             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
                             $userId = (int) auth()->id();
-                            exec("cd {$basePath} && {$php} artisan seo:import-all-gsc --user-id={$userId} > /dev/null 2>&1 &");
+                            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:import-all-gsc --user-id={$userId} > /dev/null 2>&1 &");
 
                             Notification::make()
                                 ->title('Keyword import started in background')
-                                ->body('The import process is running. You can continue working; keywords will update shortly.')
+                                ->body('Importing the latest keyword data. Progress appears on this button and in Active Jobs; this table refreshes automatically.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
@@ -178,13 +216,14 @@ class SeoKeywordsTable
                         }
                     }),
             ])
-            ->actions([
+            ->recordActions([
                 EditAction::make(),
                 Action::make('generateRowContent')
                     ->label('Generate Content')
                     ->icon('heroicon-m-cpu-chip')
                     ->color('success')
                     ->button()
+                    ->visible(fn (SeoKeyword $record): bool => (int) $record->user_id === (int) auth()->id())
                     ->form([
                         Select::make('language')
                             ->label('Language')
@@ -251,7 +290,7 @@ class SeoKeywordsTable
 
                             Notification::make()
                                 ->title('Content generation started')
-                                ->body('The generation process has started in the background. You can check the Audit Logs or GSC Sites drafts list shortly.')
+                                ->body('Your content is being created. Track it in Active Jobs, then review it under Articles.')
                                 ->success()
                                 ->send();
 
@@ -263,9 +302,6 @@ class SeoKeywordsTable
                                 ->send();
                         }
                     }),
-            ])
-            ->recordActions([
-                EditAction::make(),
             ])
             ->bulkActions([
                 BulkActionGroup::make([

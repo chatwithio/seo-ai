@@ -29,34 +29,59 @@ class AggregateSeoKeywords extends Command
             ->cursor();
 
         $count = 0;
+        $records = [];
+        $timestamp = now();
+
         foreach ($metrics as $metric) {
             $normalized = $normalizer->normalize($metric->query_text);
             $hash = $normalizer->hash($normalized);
 
             $avgCtr = $metric->total_impressions > 0 ? ($metric->total_clicks / $metric->total_impressions) * 100 : 0;
 
-            SeoKeyword::updateOrCreate(
-                [
-                    'site_id' => $site->id,
-                    'query_hash' => $hash,
-                ],
-                [
-                    'user_id' => $site->user_id,
-                    'query_text' => $metric->query_text,
-                    'normalized_query' => $normalized,
-                    'total_clicks' => $metric->total_clicks,
-                    'total_impressions' => $metric->total_impressions,
-                    'avg_ctr' => $avgCtr,
-                    'avg_position' => $metric->avg_position,
-                ]
-            );
+            $records[] = [
+                'user_id' => $site->user_id,
+                'site_id' => $site->id,
+                'query_hash' => $hash,
+                'query_text' => $metric->query_text,
+                'normalized_query' => $normalized,
+                'total_clicks' => $metric->total_clicks,
+                'total_impressions' => $metric->total_impressions,
+                'avg_ctr' => $avgCtr,
+                'avg_position' => $metric->avg_position,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ];
             $count++;
 
-            if ($count % 1000 === 0) {
+            if (count($records) === 1000) {
+                $this->upsertKeywords($records);
+                $records = [];
                 $this->info("Processed {$count} keywords...");
             }
         }
 
+        if ($records !== []) {
+            $this->upsertKeywords($records);
+        }
+
         $this->info("Aggregation complete. Processed {$count} keywords.");
+    }
+
+    private function upsertKeywords(array $records): void
+    {
+        SeoKeyword::upsert(
+            $records,
+            ['site_id', 'query_hash'],
+            [
+                'user_id',
+                'query_text',
+                'normalized_query',
+                'total_clicks',
+                'total_impressions',
+                'avg_ctr',
+                'avg_position',
+                'updated_at',
+            ],
+        );
     }
 }

@@ -45,6 +45,32 @@ class BackgroundTaskManager
         Cache::forget($lockKey);
     }
 
+    public static function update(string $lockKey, array $attributes): void
+    {
+        self::updateRegistry(function (array $tasks) use ($lockKey, $attributes) {
+            if (isset($tasks[$lockKey])) {
+                $tasks[$lockKey] = array_merge($tasks[$lockKey], $attributes, [
+                    'updated_at' => time(),
+                ]);
+            }
+
+            return $tasks;
+        });
+    }
+
+    public static function findActiveForUser(int $userId, string $name): ?array
+    {
+        foreach (self::listActive() as $lockKey => $task) {
+            if ((int) ($task['user_id'] ?? 0) !== $userId || ($task['name'] ?? '') !== $name) {
+                continue;
+            }
+
+            return array_merge($task, ['lock_key' => $lockKey]);
+        }
+
+        return null;
+    }
+
     public static function listActive(): array
     {
         $active = [];

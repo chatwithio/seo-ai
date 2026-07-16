@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\GoogleOauthToken;
 use Google\Client;
+use Google\Service\Oauth2;
+use GuzzleHttp\HandlerStack;
 use Illuminate\Http\Request;
+use Psr\Http\Message\RequestInterface;
+use Symfony\Component\Process\PhpExecutableFinder;
 
 class GoogleSearchConsoleAuthController extends Controller
 {
@@ -18,7 +22,7 @@ class GoogleSearchConsoleAuthController extends Controller
 
     public function callback(Request $request)
     {
-        if (!$request->has('code')) {
+        if (! $request->has('code')) {
             return redirect('/admin')->with('error', 'Google OAuth failed.');
         }
 
@@ -26,17 +30,17 @@ class GoogleSearchConsoleAuthController extends Controller
         $token = $client->fetchAccessTokenWithAuthCode($request->code);
 
         if (isset($token['error'])) {
-            return redirect('/admin')->with('error', 'Google OAuth failed: ' . $token['error']);
+            return redirect('/admin')->with('error', 'Google OAuth failed: '.$token['error']);
         }
 
         $client->setAccessToken($token);
-        
+
         try {
-            $oauth2 = new \Google\Service\Oauth2($client);
+            $oauth2 = new Oauth2($client);
             $userInfo = $oauth2->userinfo->get();
             $email = $userInfo->getEmail();
         } catch (\Exception $e) {
-            return redirect('/admin')->with('error', 'Failed to retrieve user email: ' . $e->getMessage());
+            return redirect('/admin')->with('error', 'Failed to retrieve user email: '.$e->getMessage());
         }
 
         if (empty($email)) {
@@ -49,6 +53,8 @@ class GoogleSearchConsoleAuthController extends Controller
             'email' => $email,
         ])->first();
 
+        $userId = (int) auth()->id();
+
         GoogleOauthToken::updateOrCreate(
             ['user_id' => auth()->id(), 'provider' => 'google', 'email' => $email],
             [
@@ -59,12 +65,18 @@ class GoogleSearchConsoleAuthController extends Controller
             ]
         );
 
-        return redirect('/admin/gsc-sites')->with('success', 'Google account connected.');
+        if ($userId > 0) {
+            $php = (new PhpExecutableFinder)->find(false) ?: 'php';
+            $basePath = base_path();
+            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:sync-gsc-sites --user-id={$userId} > /dev/null 2>&1 &");
+        }
+
+        return redirect('/admin/gsc-sites')->with('success', 'Google account connected. Connecting your sites now...');
     }
 
     private function getClient(): Client
     {
-        $client = new Client();
+        $client = new Client;
         $client->setClientId(config('services.google.client_id'));
         $client->setClientSecret(config('services.google.client_secret'));
         $client->setRedirectUri(config('services.google.redirect_uri'));
@@ -73,15 +85,16 @@ class GoogleSearchConsoleAuthController extends Controller
         $client->setAccessType('offline');
         $client->setPrompt('consent');
 
-        $stack = \GuzzleHttp\HandlerStack::create();
+        $stack = HandlerStack::create();
         $stack->push(function (callable $handler) {
-            return function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
+            return function (RequestInterface $request, array $options) use ($handler) {
                 $request = $request->withHeader('Connection', 'close')
-                                   ->withProtocolVersion('1.1');
+                    ->withProtocolVersion('1.1');
                 $options['version'] = 1.1;
                 $options['curl'][CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
                 $options['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
                 $options['curl'][CURLOPT_FRESH_CONNECT] = true;
+
                 return $handler($request, $options);
             };
         });
