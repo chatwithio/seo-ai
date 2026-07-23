@@ -3,14 +3,14 @@
 namespace App\Filament\Resources\SeoContentDrafts\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\RichEditor;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class SeoContentDraftForm
@@ -25,7 +25,7 @@ class SeoContentDraftForm
             ->components([
                 Hidden::make('keyword_group_id'),
                 Hidden::make('brief_id'),
-                
+
                 // Outer Layout Grid
                 Grid::make(3)
                     ->columnSpan('full')
@@ -50,17 +50,15 @@ class SeoContentDraftForm
                                         Toggle::make('edit_source')
                                             ->label('View HTML Source Code')
                                             ->live()
-                                            ->afterStateUpdated(fn ($state, callable $set, callable $get) => 
-                                                $state 
+                                            ->afterStateUpdated(fn ($state, callable $set, callable $get) => $state
                                                     ? $set('html_source', $get('html'))
                                                     : $set('html', $get('html_source'))
                                             ),
-                                            
+
                                         RichEditor::make('html')
                                             ->label('')
                                             ->hidden(fn (callable $get) => $get('edit_source') === true)
-                                            ->dehydrateStateUsing(fn ($state, callable $get) => 
-                                                $get('edit_source') ? $get('html_source') : $state
+                                            ->dehydrateStateUsing(fn ($state, callable $get) => $get('edit_source') ? $get('html_source') : $state
                                             )
                                             ->required()
                                             ->extraInputAttributes(['style' => 'max-height: 1080px; overflow-y: auto;'])
@@ -95,6 +93,15 @@ class SeoContentDraftForm
                             ->schema([
                                 Section::make('Publishing Settings')
                                     ->schema([
+                                        Select::make('language')
+                                            ->options([
+                                                'English' => 'English',
+                                                'Spanish' => 'Spanish',
+                                                'French' => 'French',
+                                                'Italian' => 'Italian',
+                                                'German' => 'German',
+                                                'Portuguese' => 'Portuguese',
+                                            ]),
                                         Select::make('status')
                                             ->options([
                                                 'draft' => 'Draft',

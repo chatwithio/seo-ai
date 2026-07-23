@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\AiPrompts;
 
-use App\Filament\Resources\AiPrompts\Pages\CreateAiPrompt;
 use App\Filament\Resources\AiPrompts\Pages\EditAiPrompt;
 use App\Filament\Resources\AiPrompts\Pages\ListAiPrompts;
 use App\Filament\Resources\AiPrompts\Schemas\AiPromptForm;
@@ -45,7 +44,6 @@ class AiPromptResource extends Resource
     {
         return [
             'index' => ListAiPrompts::route('/'),
-            'create' => CreateAiPrompt::route('/create'),
             'edit' => EditAiPrompt::route('/{record}/edit'),
         ];
     }

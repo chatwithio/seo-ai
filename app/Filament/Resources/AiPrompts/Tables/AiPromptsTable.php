@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\AiPrompts\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -15,11 +13,17 @@ class AiPromptsTable
     {
         return $table
             ->columns([
-                TextColumn::make('prompt_key')
-                    ->searchable(),
                 TextColumn::make('name')
-                    ->searchable(),
+                    ->label('AI Instruction')
+                    ->description(fn ($record): ?string => $record->description)
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('prompt_key')
+                    ->label('System Step')
+                    ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('is_active')
+                    ->label('Active')
                     ->boolean(),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -34,12 +38,10 @@ class AiPromptsTable
                 //
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->label('Edit instructions')
+                    ->button(),
             ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->paginated(false);
     }
 }

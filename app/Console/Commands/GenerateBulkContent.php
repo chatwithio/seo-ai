@@ -143,7 +143,9 @@ class GenerateBulkContent extends Command
                 'progress_current' => 1,
                 'progress_percent' => 33,
             ]);
-            $brief = $generationService->generateBrief($group);
+            $brief = $generationService->generateBrief($group, [
+                'language' => $this->option('language'),
+            ]);
 
             $this->info('Step 2: Generating draft...');
             BackgroundTaskManager::update($lockKey, [

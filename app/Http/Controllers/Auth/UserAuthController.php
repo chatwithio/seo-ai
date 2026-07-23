@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\SeoEmailAutomationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -16,10 +17,11 @@ class UserAuthController extends Controller
         if (Auth::check()) {
             return redirect('/admin');
         }
+
         return view('auth.register');
     }
 
-    public function register(Request $request)
+    public function register(Request $request, SeoEmailAutomationService $emailService)
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -35,6 +37,8 @@ class UserAuthController extends Controller
 
         Auth::login($user);
 
+        $emailService->sendWelcome($user);
+
         return redirect('/admin');
     }
 
@@ -43,6 +47,7 @@ class UserAuthController extends Controller
         if (Auth::check()) {
             return redirect('/admin');
         }
+
         return view('auth.login');
     }
 

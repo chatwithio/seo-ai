@@ -8,6 +8,14 @@ class SeoContentDraft extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'faq' => 'array',
+        'internal_link_suggestions' => 'array',
+        'quality_checks' => 'array',
+        'published_at' => 'datetime',
+        'api_read_at' => 'datetime',
+    ];
+
     protected static function booted()
     {
         static::creating(function ($draft) {
@@ -15,6 +23,19 @@ class SeoContentDraft extends Model
                 $draft->user_id = $draft->keyword_group_id
                     ? SeoKeywordGroup::whereKey($draft->keyword_group_id)->value('user_id')
                     : auth()->id();
+            }
+        });
+
+        static::updating(function (SeoContentDraft $draft): void {
+            if ($draft->isDirty([
+                'title',
+                'slug',
+                'meta_title',
+                'meta_description',
+                'html',
+                'plain_text',
+            ])) {
+                $draft->api_read_at = null;
             }
         });
     }

@@ -39,7 +39,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 overflow-x-hidden relative">
+<body class="relative flex min-h-screen items-start justify-center overflow-x-hidden p-4 py-8 sm:items-center">
     <!-- Decorative Glowing Background Orbs -->
     <div class="glow-orb -top-20 -left-20"></div>
     <div class="glow-orb-2 -bottom-20 -right-20"></div>
@@ -144,6 +144,8 @@
                 </a>
             </div>
         </div>
+
+        <x-product-footer />
     </div>
 </body>
 </html>

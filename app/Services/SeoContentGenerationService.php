@@ -14,8 +14,9 @@ class SeoContentGenerationService
         protected LlmContentService $llmService
     ) {}
 
-    public function generateBrief(SeoKeywordGroup $group)
+    public function generateBrief(SeoKeywordGroup $group, array $options = [])
     {
+        $language = $this->normalizeLanguage($options['language'] ?? 'English');
         $primaryKeyword = $group->primaryKeyword ? $group->primaryKeyword->query_text : $group->group_name;
         $secondaryKeywords = $group->keywords()->where('role', 'secondary')->pluck('query_text')->implode(', ');
 
@@ -29,6 +30,8 @@ class SeoContentGenerationService
         if (! $promptData) {
             throw new \Exception('Prompt config missing for generate_brief');
         }
+
+        $promptData = $this->enforceLanguage($promptData, $language);
 
         $response = $this->llmService->call($promptData, $group->user_id, $group->site_id);
         $data = json_decode($response, true);
@@ -64,17 +67,20 @@ class SeoContentGenerationService
 
     public function generateDraft(SeoContentBrief $brief, array $options = [])
     {
+        $language = $this->normalizeLanguage($options['language'] ?? 'English');
         $promptData = $this->promptService->getPrompt('generate_draft', [
             'brief' => json_encode($brief->toArray()),
             'density' => $options['density'] ?? '1.5',
             'length' => $options['length'] ?? '1000',
             'hint' => $options['hint'] ?? 'None',
-            'language' => $options['language'] ?? 'English',
+            'language' => $language,
         ]);
 
         if (! $promptData) {
             throw new \Exception('Prompt config missing for generate_draft');
         }
+
+        $promptData = $this->enforceLanguage($promptData, $language);
 
         $htmlContent = $this->llmService->call(
             $promptData,
@@ -82,8 +88,37 @@ class SeoContentGenerationService
             $brief->group?->site_id,
         );
 
+        if (blank($htmlContent)) {
+            throw new \Exception('The AI returned empty article content.');
+        }
+
+        $htmlContent = $this->cleanHtmlResponse($htmlContent);
+
+        if ($language === 'Spanish' && ! $this->looksSpanish($htmlContent)) {
+            $retryPrompt = $promptData;
+            $retryPrompt['user_prompt'] = <<<PROMPT
+The previous article was not written fully in Spanish.
+
+Rewrite the entire article below in natural Spanish. Translate every heading, paragraph, list item, callout, and FAQ. Keep the same semantic HTML structure and SEO meaning. Do not include English explanatory text.
+
+ARTICLE TO REWRITE:
+{$htmlContent}
+PROMPT;
+
+            $htmlContent = $this->llmService->call(
+                $retryPrompt,
+                $brief->user_id,
+                $brief->group?->site_id,
+            );
+
+            if (blank($htmlContent) || ! $this->looksSpanish($htmlContent)) {
+                throw new \Exception('The AI did not return the article in Spanish. Nothing was saved.');
+            }
+
+            $htmlContent = $this->cleanHtmlResponse($htmlContent);
+        }
+
         // Strip markdown code fences if returned by the LLM
-        $htmlContent = trim($htmlContent);
         if (str_starts_with($htmlContent, '```')) {
             $htmlContent = preg_replace('/^```(?:html)?\s*/i', '', $htmlContent);
             $htmlContent = preg_replace('/```$/', '', $htmlContent);
@@ -100,6 +135,8 @@ class SeoContentGenerationService
                 'meta_title' => $brief->meta_title,
                 'meta_description' => $brief->meta_description,
                 'html' => $htmlContent,
+                'plain_text' => trim(strip_tags($htmlContent)),
+                'language' => $language,
                 'status' => 'draft',
             ]
         );
@@ -107,6 +144,66 @@ class SeoContentGenerationService
         $brief->group->update(['status' => 'draft_generated']);
 
         return $draft;
+    }
+
+    private function normalizeLanguage(string $language): string
+    {
+        return match (Str::lower(trim($language))) {
+            'spanish', 'español', 'es' => 'Spanish',
+            'french', 'français', 'fr' => 'French',
+            'italian', 'italiano', 'it' => 'Italian',
+            'german', 'deutsch', 'de' => 'German',
+            'portuguese', 'português', 'pt' => 'Portuguese',
+            default => 'English',
+        };
+    }
+
+    /**
+     * @param  array{system_prompt?: ?string, user_prompt: string, output_format?: mixed}  $promptData
+     * @return array{system_prompt?: ?string, user_prompt: string, output_format?: mixed}
+     */
+    private function enforceLanguage(array $promptData, string $language): array
+    {
+        $instruction = match ($language) {
+            'Spanish' => 'MANDATORY LANGUAGE: Write every user-visible word in natural Spanish. Translate English source material, headings, metadata, examples, and FAQs into Spanish. Do not answer in English.',
+            'French' => 'MANDATORY LANGUAGE: Write every user-visible word in natural French. Translate source material, headings, metadata, examples, and FAQs into French.',
+            'Italian' => 'MANDATORY LANGUAGE: Write every user-visible word in natural Italian. Translate source material, headings, metadata, examples, and FAQs into Italian.',
+            'German' => 'MANDATORY LANGUAGE: Write every user-visible word in natural German. Translate source material, headings, metadata, examples, and FAQs into German.',
+            'Portuguese' => 'MANDATORY LANGUAGE: Write every user-visible word in natural Portuguese. Translate source material, headings, metadata, examples, and FAQs into Portuguese.',
+            default => 'MANDATORY LANGUAGE: Write every user-visible word in natural English.',
+        };
+
+        $promptData['system_prompt'] = trim(($promptData['system_prompt'] ?? '')."\n\n".$instruction);
+        $promptData['user_prompt'] = $instruction."\n\n".$promptData['user_prompt'];
+
+        return $promptData;
+    }
+
+    private function cleanHtmlResponse(string $html): string
+    {
+        $html = trim($html);
+
+        if (str_starts_with($html, '```')) {
+            $html = preg_replace('/^```(?:html)?\s*/i', '', $html);
+            $html = preg_replace('/```$/', '', $html);
+        }
+
+        return trim($html);
+    }
+
+    private function looksSpanish(string $html): bool
+    {
+        $text = Str::lower(strip_tags($html));
+        $wordCount = str_word_count($text);
+
+        if ($wordCount < 80) {
+            return true;
+        }
+
+        preg_match_all('/\b(?:el|la|los|las|de|del|que|en|para|con|una|por|como|su|es|se|al|más)\b/u', $text, $spanish);
+        preg_match_all('/\b(?:the|and|of|to|in|for|with|is|that|this|from|your|you|are)\b/u', $text, $english);
+
+        return count($spanish[0]) >= max(5, count($english[0]));
     }
 
     public function reviewDraft(SeoContentDraft $draft)
