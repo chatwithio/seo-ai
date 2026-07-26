@@ -2,7 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Livewire\EmailTemplatesTable;
+use App\Filament\Clusters\Settings;
 use App\Models\PublishingSetting;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -11,7 +11,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -26,15 +25,17 @@ use Illuminate\Support\Str;
  */
 class PublishingSettings extends Page
 {
-    protected static ?string $navigationLabel = 'Settings';
+    protected static ?string $cluster = Settings::class;
 
-    protected static ?string $title = 'Settings';
+    protected static ?string $navigationLabel = 'Publishing';
 
-    protected static ?string $slug = 'settings';
+    protected static ?string $title = 'Publishing Settings';
 
-    protected static ?int $navigationSort = 11;
+    protected static ?string $slug = 'publishing';
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-cog-6-tooth';
+    protected static ?int $navigationSort = 1;
+
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-paper-airplane';
 
     protected string $view = 'filament.pages.publishing-settings';
 
@@ -69,8 +70,6 @@ class PublishingSettings extends Page
                 'wordpress_email_enabled',
                 'wordpress_email',
                 'wordpress_post_status',
-                'weekly_activity_email_enabled',
-                'weekly_ideas_email_enabled',
             ]),
             'content_api_list_url' => url('/api/v1/content'),
             'content_api_unread_url' => url('/api/v1/content/unread'),
@@ -86,11 +85,11 @@ class PublishingSettings extends Page
     {
         return $schema
             ->components([
-                Tabs::make('Settings')
+                Tabs::make('Publishing methods')
                     ->persistTabInQueryString()
                     ->tabs([
-                        Tab::make('Publishing')
-                            ->icon('heroicon-o-paper-airplane')
+                        Tab::make('Content API')
+                            ->icon('heroicon-o-code-bracket')
                             ->schema([
                                 Section::make('Content Pull API')
                                     ->description('Let another website request generated articles using a private API code.')
@@ -142,6 +141,10 @@ class PublishingSettings extends Page
                                         'default' => 1,
                                         'xl' => 2,
                                     ]),
+                            ]),
+                        Tab::make('General Webhook')
+                            ->icon('heroicon-o-globe-alt')
+                            ->schema([
                                 Section::make('General Website Webhook')
                                     ->description('Send a neutral JSON article payload to any website or application.')
                                     ->schema([
@@ -159,6 +162,10 @@ class PublishingSettings extends Page
                                             ->revealable()
                                             ->helperText('Optional. Used to create the X-SEOAI-Signature header.'),
                                     ]),
+                            ]),
+                        Tab::make('WordPress Webhook')
+                            ->icon('heroicon-o-link')
+                            ->schema([
                                 Section::make('WordPress Webhook')
                                     ->description('Send WordPress-shaped post fields to WP Webhooks or another WordPress listener.')
                                     ->schema([
@@ -184,6 +191,10 @@ class PublishingSettings extends Page
                                             ->default('publish')
                                             ->required(),
                                     ]),
+                            ]),
+                        Tab::make('WordPress Email')
+                            ->icon('heroicon-o-envelope')
+                            ->schema([
                                 Section::make('WordPress Post by Email')
                                     ->description('WordPress can create a post from an email. Enter the private address configured in WordPress Writing settings.')
                                     ->schema([
@@ -197,27 +208,6 @@ class PublishingSettings extends Page
                                             ->required(fn (Get $get): bool => (bool) $get('wordpress_email_enabled'))
                                             ->helperText('Keep this address private. The article title becomes the email subject and the article HTML becomes the message body.'),
                                     ]),
-                            ]),
-                        Tab::make('Email Templates')
-                            ->icon('heroicon-o-envelope')
-                            ->schema([
-                                Section::make('Weekly Email Preferences')
-                                    ->description('Choose which weekly SEO emails users receive.')
-                                    ->columns([
-                                        'default' => 1,
-                                        'md' => 2,
-                                    ])
-                                    ->schema([
-                                        Toggle::make('weekly_activity_email_enabled')
-                                            ->label('Send weekly SEO activity email'),
-                                        Toggle::make('weekly_ideas_email_enabled')
-                                            ->label('Send weekly SEO content ideas'),
-                                    ]),
-                                Livewire::make(EmailTemplatesTable::class)
-                                    ->key('email-templates-table'),
-                                Section::make('Available placeholders')
-                                    ->description('{name}, {app_name}, {url}, {login_url}, {dashboard_url}, {keywords_url}, {support_url}, {youtube_url}, {keyword_count}, {impressions}, {clicks}, {article_count}, {ideas_html}')
-                                    ->schema([]),
                             ]),
                     ])
                     ->columnSpanFull(),
@@ -244,16 +234,14 @@ class PublishingSettings extends Page
                     'wordpress_email_enabled',
                     'wordpress_email',
                     'wordpress_post_status',
-                    'weekly_activity_email_enabled',
-                    'weekly_ideas_email_enabled',
                 ]),
                 'content_api_key_hash' => filled($apiCode) ? hash('sha256', $apiCode) : null,
             ],
         );
 
         Notification::make()
-            ->title('Settings saved')
-            ->body('Publishing destinations and weekly email preferences have been updated.')
+            ->title('Publishing settings saved')
+            ->body('Your publishing methods have been updated.')
             ->success()
             ->send();
     }

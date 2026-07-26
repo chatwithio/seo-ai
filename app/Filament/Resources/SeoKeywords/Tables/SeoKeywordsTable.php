@@ -11,7 +11,6 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -224,53 +223,7 @@ class SeoKeywordsTable
                     ->color('success')
                     ->button()
                     ->visible(fn (SeoKeyword $record): bool => (int) $record->user_id === (int) auth()->id())
-                    ->form([
-                        Select::make('language')
-                            ->label('Language')
-                            ->options([
-                                'English' => 'English',
-                                'Spanish' => 'Spanish',
-                                'French' => 'French',
-                                'Italian' => 'Italian',
-                                'German' => 'German',
-                                'Portuguese' => 'Portuguese',
-                            ])
-                            ->default('English')
-                            ->required(),
-                        Select::make('density')
-                            ->label('Keyword Repeat Density (%)')
-                            ->options([
-                                '1' => '1%',
-                                '1.5' => '1.5%',
-                                '2' => '2%',
-                                '2.5' => '2.5%',
-                                '3' => '3%',
-                                '3.5' => '3.5%',
-                                '4' => '4%',
-                                '4.5' => '4.5%',
-                                '5' => '5%',
-                                '5.5' => '5.5%',
-                                '6' => '6%',
-                                '6.5' => '6.5%',
-                                '7' => '7%',
-                            ])
-                            ->default('1.5')
-                            ->required(),
-                        Select::make('length')
-                            ->label('Article Length')
-                            ->options([
-                                '500' => 'Short (~500 words)',
-                                '1000' => 'Medium (~1000 words)',
-                                '1500' => 'Long (~1500 words)',
-                            ])
-                            ->default('1000')
-                            ->required(),
-                        Textarea::make('hint')
-                            ->label('Additional Hint / Context')
-                            ->placeholder('e.g. Focus on product value, write in a casual tone')
-                            ->rows(3),
-                    ])
-                    ->action(function (SeoKeyword $record, array $data) {
+                    ->action(function (SeoKeyword $record) {
                         try {
                             $site = $record->site;
 
@@ -279,14 +232,10 @@ class SeoKeywordsTable
                             }
 
                             $keywordIds = $record->id;
-                            $language = escapeshellarg($data['language']);
-                            $density = escapeshellarg($data['density']);
-                            $length = escapeshellarg($data['length']);
-                            $hint = escapeshellarg($data['hint'] ?? '');
 
                             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
-                            exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
+                            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:generate-content --keyword-ids={$keywordIds} > /dev/null 2>&1 &");
 
                             Notification::make()
                                 ->title('Content generation started')
@@ -310,75 +259,25 @@ class SeoKeywordsTable
                         ->label('Generate Content')
                         ->icon('heroicon-o-cpu-chip')
                         ->color('success')
-                        ->form([
-                            Select::make('language')
-                                ->label('Language')
-                                ->options([
-                                    'English' => 'English',
-                                    'Spanish' => 'Spanish',
-                                    'French' => 'French',
-                                    'Italian' => 'Italian',
-                                    'German' => 'German',
-                                    'Portuguese' => 'Portuguese',
-                                ])
-                                ->default('English')
-                                ->required(),
-                            Select::make('density')
-                                ->label('Keyword Repeat Density (%)')
-                                ->options([
-                                    '1' => '1%',
-                                    '1.5' => '1.5%',
-                                    '2' => '2%',
-                                    '2.5' => '2.5%',
-                                    '3' => '3%',
-                                    '3.5' => '3.5%',
-                                    '4' => '4%',
-                                    '4.5' => '4.5%',
-                                    '5' => '5%',
-                                    '5.5' => '5.5%',
-                                    '6' => '6%',
-                                    '6.5' => '6.5%',
-                                    '7' => '7%',
-
-                                ])
-                                ->default('1.5')
-                                ->required(),
-                            Select::make('length')
-                                ->label('Article Length')
-                                ->options([
-                                    '500' => 'Short (~500 words)',
-                                    '1000' => 'Medium (~1000 words)',
-                                    '1500' => 'Long (~1500 words)',
-                                ])
-                                ->default('1000')
-                                ->required(),
-                            Textarea::make('hint')
-                                ->label('Additional Hint / Context')
-                                ->placeholder('e.g. Focus on product value, write in a casual tone')
-                                ->rows(3),
-                        ])
-                        ->action(function (Collection $records, array $data) {
+                        ->action(function (Collection $records) {
                             if ($records->isEmpty()) {
                                 return;
                             }
 
                             try {
-                                $firstKeyword = $records->first();
-                                $site = $firstKeyword->site;
+                                $records->loadMissing('site');
 
-                                if (! $site) {
+                                if ($records->contains(fn (SeoKeyword $keyword): bool => ! $keyword->site)) {
                                     throw new \Exception('The selected keywords are not associated with a valid site.');
                                 }
 
-                                $keywordIds = $records->pluck('id')->implode(',');
-                                $language = escapeshellarg($data['language']);
-                                $density = escapeshellarg($data['density']);
-                                $length = escapeshellarg($data['length']);
-                                $hint = escapeshellarg($data['hint'] ?? '');
-
                                 $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                                 $basePath = base_path();
-                                exec("cd {$basePath} && {$php} artisan seo:generate-content --keyword-ids={$keywordIds} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
+
+                                foreach ($records->groupBy('site_id') as $siteKeywords) {
+                                    $keywordIds = $siteKeywords->pluck('id')->implode(',');
+                                    exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:generate-content --keyword-ids={$keywordIds} > /dev/null 2>&1 &");
+                                }
 
                                 Notification::make()
                                     ->title('Content generation started')

@@ -25,11 +25,18 @@ Schedule::call(function () {
 })->dailyAt('04:00');
 
 Schedule::call(function () {
-    $sites = GscSite::where('is_active', true)->where('agent_enabled', true)->get();
+    $sites = GscSite::where('is_active', true)
+        ->where('agent_enabled', true)
+        ->where('auto_content_enabled', false)
+        ->get();
     foreach ($sites as $site) {
         Artisan::call('seo:run-agent', ['site_id' => $site->id]);
     }
 })->dailyAt('06:00');
+
+Schedule::command('seo:auto-generate-content')
+    ->dailyAt('06:30')
+    ->withoutOverlapping();
 
 Schedule::command('seo:send-weekly-emails')
     ->mondays()

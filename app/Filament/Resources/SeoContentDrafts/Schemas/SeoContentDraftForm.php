@@ -2,8 +2,9 @@
 
 namespace App\Filament\Resources\SeoContentDrafts\Schemas;
 
+use App\Models\SeoContentBrief;
+use App\Models\SeoKeywordGroup;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -11,6 +12,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class SeoContentDraftForm
@@ -23,8 +26,54 @@ class SeoContentDraftForm
                 'lg' => 3,
             ])
             ->components([
-                Hidden::make('keyword_group_id'),
-                Hidden::make('brief_id'),
+                Section::make('Content Source')
+                    ->description('Optional. Leave both fields empty for a standalone article, or connect it to an existing keyword group and content plan.')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
+                    ->schema([
+                        Select::make('keyword_group_id')
+                            ->label('Keyword Group')
+                            ->options(fn (): array => SeoKeywordGroup::query()
+                                ->where('user_id', auth()->id())
+                                ->orderBy('group_name')
+                                ->pluck('group_name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set): mixed => $set('brief_id', null))
+                            ->placeholder('Standalone article'),
+                        Select::make('brief_id')
+                            ->label('Content Plan')
+                            ->options(fn (Get $get): array => SeoContentBrief::query()
+                                ->where('user_id', auth()->id())
+                                ->when(
+                                    filled($get('keyword_group_id')),
+                                    fn ($query) => $query->where('keyword_group_id', $get('keyword_group_id')),
+                                )
+                                ->orderBy('title')
+                                ->pluck('title', 'id')
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function (mixed $state, Set $set): void {
+                                if (blank($state)) {
+                                    return;
+                                }
+
+                                $groupId = SeoContentBrief::query()
+                                    ->where('user_id', auth()->id())
+                                    ->whereKey($state)
+                                    ->value('keyword_group_id');
+
+                                $set('keyword_group_id', $groupId);
+                            })
+                            ->placeholder('No content plan'),
+                    ]),
 
                 // Outer Layout Grid
                 Grid::make(3)

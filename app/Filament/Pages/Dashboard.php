@@ -11,8 +11,6 @@ use App\Models\SeoContentDraft;
 use App\Models\SeoKeyword;
 use App\Services\BackgroundTaskManager;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
@@ -34,9 +32,7 @@ class Dashboard extends BaseDashboard
 
     public function getDraftsCount(): int
     {
-        return SeoContentDraft::whereHas('group.site', function ($q) {
-            $q->where('user_id', Auth::id());
-        })->count();
+        return SeoContentDraft::where('user_id', Auth::id())->count();
     }
 
     public function getLowCtrKeywordsCount(): int
@@ -133,56 +129,12 @@ class Dashboard extends BaseDashboard
             ->label('Generate Content')
             ->icon('heroicon-o-sparkles')
             ->color('success')
-            ->modalHeading('Generate Content')
-            ->modalDescription('Choose how the article should be written before starting the background generation.')
-            ->modalSubmitActionLabel('Start Generation')
-            ->form([
-                Select::make('language')
-                    ->label('Language')
-                    ->options([
-                        'English' => 'English',
-                        'Spanish' => 'Spanish',
-                        'French' => 'French',
-                        'Italian' => 'Italian',
-                        'German' => 'German',
-                        'Portuguese' => 'Portuguese',
-                    ])
-                    ->default('English')
-                    ->required(),
-                Select::make('length')
-                    ->label('Article Length')
-                    ->options([
-                        '500' => 'Short (~500 words)',
-                        '1000' => 'Medium (~1000 words)',
-                        '1500' => 'Long (~1500 words)',
-                    ])
-                    ->default('1000')
-                    ->required(),
-                Select::make('density')
-                    ->label('Keyword Repeat Density')
-                    ->options([
-                        '1' => '1%',
-                        '1.5' => '1.5%',
-                        '2' => '2%',
-                        '2.5' => '2.5%',
-                        '3' => '3%',
-                    ])
-                    ->default('1.5')
-                    ->required(),
-                Textarea::make('hint')
-                    ->label('Additional Instructions')
-                    ->placeholder('Optional tone, audience, product, or page guidance')
-                    ->rows(3),
-            ])
-            ->action(function (array $data, array $arguments): void {
-                $this->startKeywordContentGeneration(
-                    (int) ($arguments['keywordId'] ?? 0),
-                    $data,
-                );
+            ->action(function (array $arguments): void {
+                $this->startKeywordContentGeneration((int) ($arguments['keywordId'] ?? 0));
             });
     }
 
-    private function startKeywordContentGeneration(int $keywordId, array $options): void
+    private function startKeywordContentGeneration(int $keywordId): void
     {
         $keyword = SeoKeyword::query()
             ->where('user_id', Auth::id())
@@ -227,12 +179,8 @@ class Dashboard extends BaseDashboard
         try {
             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
             $keywordId = (int) $keyword->id;
-            $language = escapeshellarg($options['language']);
-            $density = escapeshellarg($options['density']);
-            $length = escapeshellarg($options['length']);
-            $hint = escapeshellarg($options['hint'] ?? '');
 
-            exec('cd '.escapeshellarg(base_path()).' && '.escapeshellarg($php)." artisan seo:generate-content --keyword-ids={$keywordId} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
+            exec('cd '.escapeshellarg(base_path()).' && '.escapeshellarg($php)." artisan seo:generate-content --keyword-ids={$keywordId} > /dev/null 2>&1 &");
 
             Notification::make()
                 ->title('Content generation started')

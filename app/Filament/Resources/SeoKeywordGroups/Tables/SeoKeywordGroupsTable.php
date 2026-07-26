@@ -7,8 +7,6 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -63,47 +61,7 @@ class SeoKeywordGroupsTable
                     ->disabled(fn (?SeoKeywordGroup $record): bool => $record
                         ? Cache::has('seo:generate-content:group:'.$record->id)
                         : false)
-                    ->modalHeading('Generate Content from this Group')
-                    ->modalDescription('The AI will use the primary keyword and all related keywords in this group to create one content plan and article.')
-                    ->form([
-                        Select::make('language')
-                            ->label('Language')
-                            ->options([
-                                'English' => 'English',
-                                'Spanish' => 'Spanish',
-                                'French' => 'French',
-                                'Italian' => 'Italian',
-                                'German' => 'German',
-                                'Portuguese' => 'Portuguese',
-                            ])
-                            ->default('English')
-                            ->required(),
-                        Select::make('density')
-                            ->label('Keyword Repeat Density')
-                            ->options([
-                                '1' => '1%',
-                                '1.5' => '1.5%',
-                                '2' => '2%',
-                                '2.5' => '2.5%',
-                                '3' => '3%',
-                            ])
-                            ->default('1.5')
-                            ->required(),
-                        Select::make('length')
-                            ->label('Article Length')
-                            ->options([
-                                '500' => 'Short (~500 words)',
-                                '1000' => 'Medium (~1000 words)',
-                                '1500' => 'Long (~1500 words)',
-                            ])
-                            ->default('1000')
-                            ->required(),
-                        Textarea::make('hint')
-                            ->label('Additional Context')
-                            ->placeholder('Optional tone, audience, product, or page guidance')
-                            ->rows(3),
-                    ])
-                    ->action(function (SeoKeywordGroup $record, array $data): void {
+                    ->action(function (SeoKeywordGroup $record): void {
                         if (! $record->keywords()->exists() && ! $record->primaryKeyword()->exists()) {
                             Notification::make()
                                 ->title('This group has no keywords')
@@ -118,12 +76,8 @@ class SeoKeywordGroupsTable
                             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
                             $basePath = base_path();
                             $groupId = (int) $record->id;
-                            $language = escapeshellarg($data['language']);
-                            $density = escapeshellarg($data['density']);
-                            $length = escapeshellarg($data['length']);
-                            $hint = escapeshellarg($data['hint'] ?? '');
 
-                            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:generate-content --group-id={$groupId} --language={$language} --density={$density} --length={$length} --hint={$hint} > /dev/null 2>&1 &");
+                            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:generate-content --group-id={$groupId} > /dev/null 2>&1 &");
 
                             Notification::make()
                                 ->title('Content generation started')

@@ -9,10 +9,14 @@ use App\Services\BackgroundTaskManager;
 use App\Services\GoogleSearchConsoleService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use Symfony\Component\Process\PhpExecutableFinder;
 
 class SyncGoogleSearchConsoleSites extends Command
 {
-    protected $signature = 'seo:sync-gsc-sites {--user-id= : Sync sites for this user}';
+    protected $signature = 'seo:sync-gsc-sites
+        {--user-id= : Sync sites for this user}
+        {--token-id= : Sync only this connected Google account}
+        {--import-days= : Start a keyword import for this many days after syncing}';
 
     protected $description = 'Sync Google Search Console sites for one user';
 
@@ -26,6 +30,10 @@ class SyncGoogleSearchConsoleSites extends Command
             return self::FAILURE;
         }
 
+        $tokenId = (int) $this->option('token-id');
+        $importDays = filled($this->option('import-days'))
+            ? max(1, min((int) $this->option('import-days'), 486))
+            : null;
         $lockKey = 'seo:sync-gsc-sites:lock:user:'.$userId;
 
         if (Cache::has($lockKey)) {
@@ -36,18 +44,31 @@ class SyncGoogleSearchConsoleSites extends Command
 
         $tokens = GoogleOauthToken::where('provider', 'google')
             ->where('user_id', $userId)
+            ->when($tokenId > 0, fn ($query) => $query->whereKey($tokenId))
             ->get();
 
         if ($tokens->isEmpty()) {
-            $this->error('No Google accounts are connected.');
+            $this->error($tokenId > 0
+                ? 'The selected Google account is not connected to this user.'
+                : 'No Google accounts are connected.');
 
             return self::FAILURE;
+        }
+
+        $command = 'seo:sync-gsc-sites --user-id='.$userId;
+
+        if ($tokenId > 0) {
+            $command .= ' --token-id='.$tokenId;
+        }
+
+        if ($importDays !== null) {
+            $command .= ' --import-days='.$importDays;
         }
 
         BackgroundTaskManager::register(
             $lockKey,
             'Sync Google Sites',
-            'seo:sync-gsc-sites --user-id='.$userId,
+            $command,
             $userId,
         );
         BackgroundTaskManager::update($lockKey, [
@@ -125,11 +146,35 @@ class SyncGoogleSearchConsoleSites extends Command
                 return self::FAILURE;
             }
 
+            if ($importDays !== null) {
+                BackgroundTaskManager::update($lockKey, [
+                    'status_text' => "Sites synced. Starting {$importDays}-day keyword import...",
+                    'progress_current' => $tokens->count(),
+                    'progress_percent' => 100,
+                ]);
+
+                $this->startKeywordImport($userId, $tokenId, $importDays);
+            }
+
             $this->info("Synced {$syncedCount} site(s).");
 
             return self::SUCCESS;
         } finally {
             BackgroundTaskManager::unregister($lockKey);
         }
+    }
+
+    private function startKeywordImport(int $userId, int $tokenId, int $days): void
+    {
+        $php = (new PhpExecutableFinder)->find(false) ?: 'php';
+        $command = 'cd '.escapeshellarg(base_path())
+            .' && '.escapeshellarg($php)
+            ." artisan seo:import-all-gsc --user-id={$userId} --days={$days}";
+
+        if ($tokenId > 0) {
+            $command .= " --token-id={$tokenId}";
+        }
+
+        exec($command.' > /dev/null 2>&1 &');
     }
 }

@@ -16,14 +16,18 @@ class ImportAllSearchConsoleKeywords extends Command
 {
     protected $signature = 'seo:import-all-gsc
         {--user-id= : Import all active sites owned by this user}
-        {--site-id= : Import only this active site}';
+        {--site-id= : Import only this active site}
+        {--token-id= : Import active sites linked to this Google account}
+        {--days=365 : Number of available Search Console days to import}';
 
-    protected $description = 'Import one year of GSC keywords for one user or one site';
+    protected $description = 'Import a configurable date range of GSC keywords for one user, Google account, or site';
 
     public function handle(GoogleSearchConsoleService $gscService)
     {
         $userId = $this->option('user-id');
         $siteId = $this->option('site-id');
+        $tokenId = $this->option('token-id');
+        $days = max(1, min((int) $this->option('days'), 486));
 
         if (! $userId && ! $siteId) {
             $this->error('Either --user-id or --site-id is required.');
@@ -31,7 +35,11 @@ class ImportAllSearchConsoleKeywords extends Command
             return 1;
         }
 
-        $scope = $siteId ? 'site:'.(int) $siteId : 'user:'.(int) $userId;
+        $scope = $siteId
+            ? 'site:'.(int) $siteId
+            : ($tokenId
+                ? 'user:'.(int) $userId.':token:'.(int) $tokenId
+                : 'user:'.(int) $userId);
         $lockKey = 'seo:import-all-gsc:lock:'.$scope;
         $lockData = Cache::get($lockKey);
 
@@ -49,6 +57,13 @@ class ImportAllSearchConsoleKeywords extends Command
         $command = $siteId
             ? 'seo:import-all-gsc --site-id='.(int) $siteId
             : 'seo:import-all-gsc --user-id='.(int) $userId;
+
+        if ($tokenId) {
+            $command .= ' --token-id='.(int) $tokenId;
+        }
+
+        $command .= ' --days='.$days;
+
         $taskSiteId = $siteId ? (int) $siteId : null;
         $taskUserId = $userId
             ? (int) $userId
@@ -66,6 +81,10 @@ class ImportAllSearchConsoleKeywords extends Command
                 $sitesQuery->where('user_id', (int) $userId);
             }
 
+            if ($tokenId) {
+                $sitesQuery->where('google_oauth_token_id', (int) $tokenId);
+            }
+
             $sites = $sitesQuery->get();
 
             if ($sites->isEmpty()) {
@@ -75,19 +94,22 @@ class ImportAllSearchConsoleKeywords extends Command
             }
 
             BackgroundTaskManager::update($lockKey, [
-                'status_text' => 'Preparing the latest Search Console data...',
+                'status_text' => "Preparing the latest {$days} days of Search Console data...",
                 'progress_current' => 0,
                 'progress_total' => $sites->count(),
                 'progress_percent' => 0,
                 'imported_rows' => 0,
             ]);
 
-            $startDate = now()->subYear()->format('Y-m-d');
-            $endDate = now()->subDays(3)->format('Y-m-d');
-            // We use a fixed report date for this 1-year aggregated import to prevent duplicate records
-            $reportDate = now()->subDays(3)->format('Y-m-d');
+            $delayDays = config('seo_agent.import_delay_days', 3);
+            $endDateValue = now()->subDays($delayDays)->startOfDay();
+            $startDate = $endDateValue->copy()->subDays($days - 1)->format('Y-m-d');
+            $endDate = $endDateValue->format('Y-m-d');
+            // Use the last available Search Console date as the aggregated
+            // report date so rerunning the same range replaces that snapshot.
+            $reportDate = $endDate;
 
-            $this->info("Starting keyword import for all sites from {$startDate} to {$endDate}");
+            $this->info("Starting {$days}-day keyword import from {$startDate} to {$endDate}");
 
             $failedSites = 0;
 
@@ -108,7 +130,7 @@ class ImportAllSearchConsoleKeywords extends Command
                     'site_id' => $site->id,
                     'entity_type' => 'gsc_import',
                     'action' => 'gsc_import_started',
-                    'message' => "Starting 1-year import from {$startDate} to {$endDate}",
+                    'message' => "Starting {$days}-day import from {$startDate} to {$endDate}",
                 ]);
 
                 $startRow = 0;

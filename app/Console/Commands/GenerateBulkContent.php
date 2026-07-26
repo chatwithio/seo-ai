@@ -18,9 +18,9 @@ class GenerateBulkContent extends Command
     protected $signature = 'seo:generate-content
         {--keyword-ids= : Generate from individual keyword IDs and create a group}
         {--group-id= : Generate for an existing keyword group}
-        {--language=English}
-        {--density=1.5}
-        {--length=1000}
+        {--language= : Override the site language}
+        {--density= : Override the site keyword density}
+        {--length= : Override the site article length}
         {--hint=}';
 
     protected $description = 'Generate content from selected keywords or an existing keyword group';
@@ -70,6 +70,14 @@ class GenerateBulkContent extends Command
 
             return 1;
         }
+
+        $siteOptions = $site->contentGenerationOptions();
+        $options = [
+            'language' => $this->option('language') ?: $siteOptions['language'],
+            'density' => $this->option('density') ?: $siteOptions['density'],
+            'length' => $this->option('length') ?: $siteOptions['length'],
+            'hint' => filled($this->option('hint')) ? $this->option('hint') : $siteOptions['hint'],
+        ];
 
         $primaryModel = $group?->primaryKeyword ?? $keywords->sortByDesc('total_clicks')->first();
 
@@ -144,7 +152,7 @@ class GenerateBulkContent extends Command
                 'progress_percent' => 33,
             ]);
             $brief = $generationService->generateBrief($group, [
-                'language' => $this->option('language'),
+                'language' => $options['language'],
             ]);
 
             $this->info('Step 2: Generating draft...');
@@ -154,10 +162,10 @@ class GenerateBulkContent extends Command
                 'progress_percent' => 66,
             ]);
             $draft = $generationService->generateDraft($brief, [
-                'density' => $this->option('density'),
-                'length' => $this->option('length'),
-                'hint' => $this->option('hint') ?? '',
-                'language' => $this->option('language'),
+                'density' => $options['density'],
+                'length' => $options['length'],
+                'hint' => $options['hint'],
+                'language' => $options['language'],
             ]);
 
             $this->info('Step 3: Reviewing draft...');
@@ -188,9 +196,9 @@ class GenerateBulkContent extends Command
                 'context' => [
                     'group_id' => $group?->id,
                     'draft_id' => $draft->id,
-                    'language' => $this->option('language'),
-                    'density' => $this->option('density'),
-                    'length' => $this->option('length'),
+                    'language' => $options['language'],
+                    'density' => $options['density'],
+                    'length' => $options['length'],
                 ],
             ]);
 

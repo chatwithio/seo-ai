@@ -26,6 +26,7 @@ class SeoContentDraftsTable
                     ->sortable(),
                 TextColumn::make('brief.primary_keyword')
                     ->label('Primary Keyword')
+                    ->placeholder('Standalone article')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('group.group_name')

@@ -55,7 +55,7 @@ class GoogleSearchConsoleAuthController extends Controller
 
         $userId = (int) auth()->id();
 
-        GoogleOauthToken::updateOrCreate(
+        $googleToken = GoogleOauthToken::updateOrCreate(
             ['user_id' => auth()->id(), 'provider' => 'google', 'email' => $email],
             [
                 'access_token' => $token['access_token'],
@@ -68,10 +68,21 @@ class GoogleSearchConsoleAuthController extends Controller
         if ($userId > 0) {
             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
             $basePath = base_path();
-            exec('cd '.escapeshellarg($basePath).' && '.escapeshellarg($php)." artisan seo:sync-gsc-sites --user-id={$userId} > /dev/null 2>&1 &");
+            $tokenId = (int) $googleToken->id;
+            $importOption = $existing ? '' : ' --import-days=90';
+
+            exec(
+                'cd '.escapeshellarg($basePath)
+                .' && '.escapeshellarg($php)
+                ." artisan seo:sync-gsc-sites --user-id={$userId} --token-id={$tokenId}{$importOption} > /dev/null 2>&1 &",
+            );
         }
 
-        return redirect('/admin/gsc-sites')->with('success', 'Google account connected. Connecting your sites now...');
+        $message = $existing
+            ? 'Google account reconnected. Refreshing its Search Console sites now...'
+            : 'Google account connected. Syncing its sites, then importing the latest 90 days of keywords automatically.';
+
+        return redirect('/admin/gsc-sites')->with('success', $message);
     }
 
     private function getClient(): Client
