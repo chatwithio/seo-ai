@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    'default' => env('MAILER_DSN') ? 'dsn' : env('MAIL_MAILER', 'log'),
 
     /*
     |--------------------------------------------------------------------------
@@ -36,6 +36,11 @@ return [
     */
 
     'mailers' => [
+
+        'dsn' => [
+            'transport' => 'dsn',
+            'dsn' => env('MAILER_DSN'),
+        ],
 
         'smtp' => [
             'transport' => 'smtp',
