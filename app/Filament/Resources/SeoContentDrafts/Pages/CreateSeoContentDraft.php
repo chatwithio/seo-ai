@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\SeoContentDrafts\Pages;
 
+use App\Filament\Resources\Pages\CreateRecord;
 use App\Filament\Resources\SeoContentDrafts\SeoContentDraftResource;
-use Filament\Resources\Pages\CreateRecord;
 
 class CreateSeoContentDraft extends CreateRecord
 {

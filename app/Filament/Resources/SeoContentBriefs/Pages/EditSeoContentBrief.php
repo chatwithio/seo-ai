@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\SeoContentBriefs\Pages;
 
+use App\Filament\Resources\Pages\EditRecord;
 use App\Filament\Resources\SeoContentBriefs\SeoContentBriefResource;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
 
 class EditSeoContentBrief extends EditRecord
 {

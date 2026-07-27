@@ -21,6 +21,7 @@ class GenerateBulkContent extends Command
         {--language= : Override the site language}
         {--density= : Override the site keyword density}
         {--length= : Override the site article length}
+        {--skip-auto-publish : Generate the article without automatic publishing}
         {--hint=}';
 
     protected $description = 'Generate content from selected keywords or an existing keyword group';
@@ -166,6 +167,7 @@ class GenerateBulkContent extends Command
                 'length' => $options['length'],
                 'hint' => $options['hint'],
                 'language' => $options['language'],
+                'auto_publish' => ! $this->option('skip-auto-publish'),
             ]);
 
             $this->info('Step 3: Reviewing draft...');

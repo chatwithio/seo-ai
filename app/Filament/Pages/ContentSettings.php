@@ -14,6 +14,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -55,6 +56,11 @@ class ContentSettings extends Page
                 'content_length',
                 'content_keyword_density',
                 'content_instructions',
+                'agent_enabled',
+                'agent_strategy',
+                'min_impressions',
+                'max_clicks',
+                'grouping_limit',
             ]),
         ])->all();
 
@@ -97,6 +103,11 @@ class ContentSettings extends Page
                 'content_length',
                 'content_keyword_density',
                 'content_instructions',
+                'agent_enabled',
+                'agent_strategy',
+                'min_impressions',
+                'max_clicks',
+                'grouping_limit',
             ]));
         }
 
@@ -129,6 +140,48 @@ class ContentSettings extends Page
             ->key("content-site-{$site->id}")
             ->icon('heroicon-o-globe-alt')
             ->schema([
+                Section::make('Full AI Agent Workflow')
+                    ->description('Configure the scheduled workflow that groups keywords, generates plans and articles, and reviews the result.')
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
+                    ->schema([
+                        Toggle::make("{$path}.agent_enabled")
+                            ->label('Enable full AI agent workflow')
+                            ->helperText('Runs for this site only when automatic content generation below is disabled.')
+                            ->columnSpanFull(),
+                        Select::make("{$path}.agent_strategy")
+                            ->label('Keyword targeting strategy')
+                            ->options([
+                                'low_ctr' => 'High impressions, low clicks',
+                                'high_clicks' => 'Top-performing keywords',
+                            ])
+                            ->default('low_ctr')
+                            ->live()
+                            ->required(),
+                        TextInput::make("{$path}.grouping_limit")
+                            ->label('Keywords grouped per batch')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(200)
+                            ->default(50)
+                            ->required(),
+                        TextInput::make("{$path}.min_impressions")
+                            ->label('Minimum impressions')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(100)
+                            ->visible(fn (Get $get): bool => $get("{$path}.agent_strategy") === 'low_ctr')
+                            ->required(fn (Get $get): bool => $get("{$path}.agent_strategy") === 'low_ctr'),
+                        TextInput::make("{$path}.max_clicks")
+                            ->label('Maximum clicks')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(10)
+                            ->visible(fn (Get $get): bool => $get("{$path}.agent_strategy") === 'low_ctr')
+                            ->required(fn (Get $get): bool => $get("{$path}.agent_strategy") === 'low_ctr'),
+                    ]),
                 Section::make('Automatic Content Generation')
                     ->description("Choose what to generate for {$site->site_url} and how often it should run.")
                     ->columns([

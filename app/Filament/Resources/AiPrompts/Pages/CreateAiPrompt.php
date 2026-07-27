@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\AiPrompts\Pages;
 
 use App\Filament\Resources\AiPrompts\AiPromptResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateAiPrompt extends CreateRecord
 {

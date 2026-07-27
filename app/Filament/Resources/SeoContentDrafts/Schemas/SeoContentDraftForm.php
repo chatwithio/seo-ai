@@ -99,6 +99,7 @@ class SeoContentDraftForm
                                         Toggle::make('edit_source')
                                             ->label('View HTML Source Code')
                                             ->live()
+                                            ->dehydrated(false)
                                             ->afterStateUpdated(fn ($state, callable $set, callable $get) => $state
                                                     ? $set('html_source', $get('html'))
                                                     : $set('html', $get('html_source'))
@@ -107,6 +108,7 @@ class SeoContentDraftForm
                                         RichEditor::make('html')
                                             ->label('')
                                             ->hidden(fn (callable $get) => $get('edit_source') === true)
+                                            ->dehydratedWhenHidden()
                                             ->dehydrateStateUsing(fn ($state, callable $get) => $get('edit_source') ? $get('html_source') : $state
                                             )
                                             ->required()
@@ -131,6 +133,7 @@ class SeoContentDraftForm
                                         Textarea::make('html_source')
                                             ->label('Raw HTML Source')
                                             ->hidden(fn (callable $get) => $get('edit_source') !== true)
+                                            ->dehydrated(false)
                                             ->extraInputAttributes(['style' => 'max-height: 1080px; overflow-y: auto;'])
                                             ->rows(20),
                                     ]),

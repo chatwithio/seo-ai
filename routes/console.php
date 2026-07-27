@@ -36,7 +36,8 @@ Schedule::call(function () {
 
 Schedule::command('seo:auto-generate-content')
     ->dailyAt('06:30')
-    ->withoutOverlapping();
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/auto-content.log'));
 
 Schedule::command('seo:send-weekly-emails')
     ->mondays()

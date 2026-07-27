@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\SeoKeywordGroups\Pages;
 
+use App\Filament\Resources\Pages\CreateRecord;
 use App\Filament\Resources\SeoKeywordGroups\SeoKeywordGroupResource;
-use Filament\Resources\Pages\CreateRecord;
 
 class CreateSeoKeywordGroup extends CreateRecord
 {

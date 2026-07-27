@@ -19,6 +19,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @property-read Schema $form
@@ -61,14 +62,19 @@ class PublishingSettings extends Page
             ...$settings->only([
                 'content_api_enabled',
                 'content_api_key',
+                'auto_publish_enabled',
+                'auto_publish_multiple_channels',
                 'general_webhook_enabled',
                 'general_webhook_url',
                 'general_webhook_secret',
+                'general_webhook_priority',
                 'wordpress_webhook_enabled',
                 'wordpress_webhook_url',
                 'wordpress_webhook_secret',
+                'wordpress_webhook_priority',
                 'wordpress_email_enabled',
                 'wordpress_email',
+                'wordpress_email_priority',
                 'wordpress_post_status',
             ]),
             'content_api_list_url' => url('/api/v1/content'),
@@ -85,9 +91,27 @@ class PublishingSettings extends Page
     {
         return $schema
             ->components([
+                Section::make('Automatic Publishing')
+                    ->description('Deliver every newly generated article automatically using your enabled publishing methods.')
+                    ->icon('heroicon-o-bolt')
+                    ->schema([
+                        Toggle::make('auto_publish_enabled')
+                            ->label('Auto-publish new articles')
+                            ->helperText('Publishing starts immediately after a new AI article is generated.')
+                            ->live(),
+                        Toggle::make('auto_publish_multiple_channels')
+                            ->label('Send each article through every enabled method')
+                            ->helperText('Off: stop after the first successful method and use the rest only as fallbacks. On: deliver the same article through every enabled method.')
+                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled')),
+                    ])
+                    ->columns([
+                        'default' => 1,
+                        'xl' => 2,
+                    ])
+                    ->columnSpanFull(),
                 Tabs::make('Publishing methods')
                     ->persistTabInQueryString()
-                    ->tabs([
+                    ->tabs(array_reverse([
                         Tab::make('Content API')
                             ->icon('heroicon-o-code-bracket')
                             ->schema([
@@ -151,6 +175,15 @@ class PublishingSettings extends Page
                                         Toggle::make('general_webhook_enabled')
                                             ->label('Enable general webhook')
                                             ->live(),
+                                        TextInput::make('general_webhook_priority')
+                                            ->label('Automatic publishing position')
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(99)
+                                            ->default(30)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
+                                            ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
                                         TextInput::make('general_webhook_url')
                                             ->label('Webhook URL')
                                             ->url()
@@ -172,6 +205,15 @@ class PublishingSettings extends Page
                                         Toggle::make('wordpress_webhook_enabled')
                                             ->label('Enable WordPress webhook')
                                             ->live(),
+                                        TextInput::make('wordpress_webhook_priority')
+                                            ->label('Automatic publishing position')
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(99)
+                                            ->default(20)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
+                                            ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
                                         TextInput::make('wordpress_webhook_url')
                                             ->label('WordPress webhook URL')
                                             ->url()
@@ -201,6 +243,15 @@ class PublishingSettings extends Page
                                         Toggle::make('wordpress_email_enabled')
                                             ->label('Enable WordPress post by email')
                                             ->live(),
+                                        TextInput::make('wordpress_email_priority')
+                                            ->label('Automatic publishing position')
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(99)
+                                            ->default(10)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
+                                            ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
                                         TextInput::make('wordpress_email')
                                             ->label('Private WordPress publishing email')
                                             ->email()
@@ -209,7 +260,7 @@ class PublishingSettings extends Page
                                             ->helperText('Keep this address private. The article title becomes the email subject and the article HTML becomes the message body.'),
                                     ]),
                             ]),
-                    ])
+                    ]))
                     ->columnSpanFull(),
             ]);
     }
@@ -219,20 +270,27 @@ class PublishingSettings extends Page
         $data = $this->form->getState();
         $apiCode = (string) ($data['content_api_key'] ?? '');
 
+        $this->validateAutomaticPublishing($data);
+
         PublishingSetting::updateOrCreate(
             ['user_id' => auth()->id()],
             [
                 ...Arr::only($data, [
                     'content_api_enabled',
                     'content_api_key',
+                    'auto_publish_enabled',
+                    'auto_publish_multiple_channels',
                     'general_webhook_enabled',
                     'general_webhook_url',
                     'general_webhook_secret',
+                    'general_webhook_priority',
                     'wordpress_webhook_enabled',
                     'wordpress_webhook_url',
                     'wordpress_webhook_secret',
+                    'wordpress_webhook_priority',
                     'wordpress_email_enabled',
                     'wordpress_email',
+                    'wordpress_email_priority',
                     'wordpress_post_status',
                 ]),
                 'content_api_key_hash' => filled($apiCode) ? hash('sha256', $apiCode) : null,
@@ -249,5 +307,37 @@ class PublishingSettings extends Page
     private function newApiCode(): string
     {
         return 'seoai_'.Str::random(48);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function validateAutomaticPublishing(array $data): void
+    {
+        if (! ($data['auto_publish_enabled'] ?? false)) {
+            return;
+        }
+
+        $enabledMethods = collect([
+            'general_webhook' => (bool) ($data['general_webhook_enabled'] ?? false),
+            'wordpress_webhook' => (bool) ($data['wordpress_webhook_enabled'] ?? false),
+            'wordpress_email' => (bool) ($data['wordpress_email_enabled'] ?? false),
+        ])->filter();
+
+        if ($enabledMethods->isEmpty()) {
+            throw ValidationException::withMessages([
+                'data.auto_publish_enabled' => 'Enable at least one webhook or WordPress email method before turning on automatic publishing.',
+            ]);
+        }
+
+        $priorities = $enabledMethods
+            ->keys()
+            ->map(fn (string $method): int => (int) ($data[$method.'_priority'] ?? 0));
+
+        if ($priorities->duplicates()->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'data.auto_publish_enabled' => 'Each enabled publishing method must have a different automatic publishing position.',
+            ]);
+        }
     }
 }

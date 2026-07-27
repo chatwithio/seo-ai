@@ -14,6 +14,47 @@ use Throwable;
 class ContentPublishingService
 {
     /**
+     * Automatically deliver a newly generated article using the user's
+     * configured priority and delivery behavior.
+     *
+     * @return array{
+     *     attempted: array<int, string>,
+     *     succeeded: array<int, string>,
+     *     failed: array<string, string>
+     * }
+     */
+    public function publishAutomatically(SeoContentDraft $draft): array
+    {
+        $settings = PublishingSetting::where('user_id', $draft->user_id)->first();
+        $result = [
+            'attempted' => [],
+            'succeeded' => [],
+            'failed' => [],
+        ];
+
+        if (! $settings?->auto_publish_enabled) {
+            return $result;
+        }
+
+        foreach ($this->orderedAutomaticChannels($settings) as $channel) {
+            $result['attempted'][] = $channel;
+
+            try {
+                $this->publish($draft, $channel);
+                $result['succeeded'][] = $channel;
+
+                if (! $settings->auto_publish_multiple_channels) {
+                    break;
+                }
+            } catch (Throwable $exception) {
+                $result['failed'][$channel] = $exception->getMessage();
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * @return array{message: string, published_url: ?string}
      */
     public function publish(SeoContentDraft $draft, string $channel): array
@@ -87,6 +128,26 @@ class ContentPublishingService
         if ($settings->wordpress_email_enabled && filled($settings->wordpress_email)) {
             $channels['wordpress_email'] = 'WordPress Post by Email';
         }
+
+        return $channels;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function orderedAutomaticChannels(PublishingSetting $settings): array
+    {
+        $priorities = [
+            'wordpress_email' => (int) ($settings->wordpress_email_priority ?: 10),
+            'wordpress_webhook' => (int) ($settings->wordpress_webhook_priority ?: 20),
+            'general_webhook' => (int) ($settings->general_webhook_priority ?: 30),
+        ];
+        $channels = array_keys(self::availableChannels($settings));
+
+        usort(
+            $channels,
+            fn (string $left, string $right): int => [$priorities[$left], $left] <=> [$priorities[$right], $right],
+        );
 
         return $channels;
     }

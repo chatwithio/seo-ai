@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\GscSites\Schemas;
 
+use App\Filament\Pages\ContentSettings;
+use App\Models\GscSite;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -17,7 +20,8 @@ class GscSiteForm
         return $schema
             ->components([
                 TextInput::make('site_url')
-                    ->url()
+                    ->label('Search Console Property')
+                    ->helperText('Supports URL properties and domain properties such as sc-domain:seoai.tochat.be.')
                     ->required(),
                 TextInput::make('name'),
                 Select::make('google_oauth_token_id')
@@ -33,37 +37,19 @@ class GscSiteForm
                     ->required(),
                 DateTimePicker::make('last_imported_at'),
 
-                Section::make('AI Agent Configuration')
-                    ->description('Set up the targeting parameters for this Search Console property.')
-                    ->schema([
-                        Toggle::make('agent_enabled')
-                            ->label('Enable Automated Agent')
-                            ->default(false),
-                        Select::make('agent_strategy')
-                            ->label('Targeting Strategy')
-                            ->options([
-                                'low_ctr' => 'Low CTR (High Impressions, Low/No Clicks - High Potential)',
-                                'high_clicks' => 'High Clicks (Focus on top performers)',
-                            ])
-                            ->default('low_ctr')
-                            ->reactive()
-                            ->required(),
-                        TextInput::make('min_impressions')
-                            ->numeric()
-                            ->label('Minimum Impressions Threshold')
-                            ->default(100)
-                            ->visible(fn ($get) => $get('agent_strategy') === 'low_ctr'),
-                        TextInput::make('max_clicks')
-                            ->numeric()
-                            ->label('Maximum Clicks Limit')
-                            ->default(10)
-                            ->visible(fn ($get) => $get('agent_strategy') === 'low_ctr'),
-                        TextInput::make('grouping_limit')
-                            ->numeric()
-                            ->label('Batch Size (Keywords to group at once)')
-                            ->default(50)
-                            ->required(),
-                    ]),
+                Section::make('Content and AI Settings')
+                    ->description('Content generation and AI agent controls are managed per site under Settings.')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->visible(fn (?GscSite $record): bool => $record !== null)
+                    ->headerActions([
+                        Action::make('editContentSettings')
+                            ->label('Edit content and AI settings')
+                            ->icon('heroicon-o-arrow-top-right-on-square')
+                            ->url(fn (?GscSite $record): string => ContentSettings::getUrl(
+                                $record ? ['tab' => "content-site-{$record->id}"] : [],
+                            )),
+                    ])
+                    ->schema([]),
             ]);
     }
 }

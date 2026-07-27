@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\SeoKeywords\Pages;
 
+use App\Filament\Resources\Pages\EditRecord;
 use App\Filament\Resources\SeoKeywords\SeoKeywordResource;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
 
 class EditSeoKeyword extends EditRecord
 {

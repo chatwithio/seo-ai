@@ -12,8 +12,11 @@ class AutoGenerateSiteContent extends Command
 {
     protected $signature = 'seo:auto-generate-content
         {--site-id= : Run one site only}
+        {--limit= : Override the configured article count for this run}
         {--force : Ignore the configured interval}
-        {--dry-run : Show selected keywords without starting generation}';
+        {--dry-run : Show selected keywords without starting generation}
+        {--foreground : Run generation in this command and show its output}
+        {--skip-auto-publish : Generate articles without automatic publishing}';
 
     protected $description = 'Start scheduled content generation using each site content policy';
 
@@ -35,16 +38,22 @@ class AutoGenerateSiteContent extends Command
         }
 
         $started = 0;
+        $failed = 0;
 
         foreach ($sites as $site) {
+            $siteStarted = 0;
+
             if (! $this->option('force') && ! $this->isDue($site)) {
                 $this->line("Skipping {$site->site_url}: its interval is not due.");
 
                 continue;
             }
 
+            $limit = filled($this->option('limit'))
+                ? (int) $this->option('limit')
+                : (int) $site->auto_content_count;
             $keywords = $this->candidateKeywords($site)
-                ->limit(max(1, min((int) $site->auto_content_count, 20)))
+                ->limit(max(1, min($limit, 20)))
                 ->get();
 
             if ($keywords->isEmpty()) {
@@ -64,20 +73,40 @@ class AutoGenerateSiteContent extends Command
                     'content_generation_status' => SeoKeyword::CONTENT_GENERATING,
                 ]);
 
-                $this->launch((int) $keyword->id);
+                if ($this->option('foreground')) {
+                    $exitCode = $this->call('seo:generate-content', array_filter([
+                        '--keyword-ids' => (string) $keyword->id,
+                        '--skip-auto-publish' => $this->option('skip-auto-publish') ?: null,
+                    ]));
+
+                    if ($exitCode === self::SUCCESS) {
+                        $started++;
+                        $siteStarted++;
+                    } else {
+                        $failed++;
+                    }
+
+                    continue;
+                }
+
+                $this->launch(
+                    (int) $keyword->id,
+                    (bool) $this->option('skip-auto-publish'),
+                );
                 $started++;
+                $siteStarted++;
             }
 
-            if (! $this->option('dry-run')) {
+            if (! $this->option('dry-run') && $siteStarted > 0) {
                 $site->update(['auto_content_last_run_at' => now()]);
             }
         }
 
         $this->info($this->option('dry-run')
             ? 'Dry run completed. No content was started.'
-            : "{$started} content generation task(s) started.");
+            : "{$started} content generation task(s) completed or started; {$failed} failed.");
 
-        return self::SUCCESS;
+        return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
 
     private function isDue(GscSite $site): bool
@@ -126,14 +155,17 @@ class AutoGenerateSiteContent extends Command
             ->orderByDesc('total_clicks');
     }
 
-    private function launch(int $keywordId): void
+    private function launch(int $keywordId, bool $skipAutoPublish): void
     {
         $php = (new PhpExecutableFinder)->find(false) ?: 'php';
+        $skipPublishing = $skipAutoPublish ? ' --skip-auto-publish' : '';
+        $log = storage_path('logs/content-generation.log');
 
         exec(
             'cd '.escapeshellarg(base_path())
             .' && '.escapeshellarg($php)
-            ." artisan seo:generate-content --keyword-ids={$keywordId} > /dev/null 2>&1 &",
+            ." artisan seo:generate-content --keyword-ids={$keywordId}{$skipPublishing}"
+            .' >> '.escapeshellarg($log).' 2>&1 &',
         );
     }
 }

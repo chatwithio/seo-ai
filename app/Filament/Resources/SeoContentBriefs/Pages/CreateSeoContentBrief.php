@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\SeoContentBriefs\Pages;
 
+use App\Filament\Resources\Pages\CreateRecord;
 use App\Filament\Resources\SeoContentBriefs\SeoContentBriefResource;
-use Filament\Resources\Pages\CreateRecord;
 
 class CreateSeoContentBrief extends CreateRecord
 {
