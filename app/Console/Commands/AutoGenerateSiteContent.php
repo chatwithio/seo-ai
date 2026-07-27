@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\GscSite;
 use App\Models\SeoKeyword;
+use App\Services\AccountAutomationScheduleService;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\Process\PhpExecutableFinder;
@@ -14,15 +15,17 @@ class AutoGenerateSiteContent extends Command
         {--site-id= : Run one site only}
         {--limit= : Override the configured article count for this run}
         {--force : Ignore the configured interval}
+        {--scheduled : Run only accounts scheduled for the current local minute}
         {--dry-run : Show selected keywords without starting generation}
         {--foreground : Run generation in this command and show its output}
         {--skip-auto-publish : Generate articles without automatic publishing}';
 
     protected $description = 'Start scheduled content generation using each site content policy';
 
-    public function handle(): int
+    public function handle(AccountAutomationScheduleService $schedules): int
     {
         $sites = GscSite::query()
+            ->with('user.publishingSetting')
             ->where('is_active', true)
             ->where('auto_content_enabled', true)
             ->when(
@@ -32,19 +35,34 @@ class AutoGenerateSiteContent extends Command
             ->get();
 
         if ($sites->isEmpty()) {
-            $this->info('No sites have automatic content generation enabled.');
+            if (! $this->option('scheduled')) {
+                $this->info('No sites have automatic content generation enabled.');
+            }
 
             return self::SUCCESS;
         }
 
         $started = 0;
         $failed = 0;
+        $scheduledAccounts = 0;
+        $now = now();
 
         foreach ($sites as $site) {
             $siteStarted = 0;
+            $settings = $site->user?->publishingSetting;
+
+            if ($this->option('scheduled')) {
+                if (! $settings || ! $schedules->isScheduledNow($settings, $now)) {
+                    continue;
+                }
+
+                $scheduledAccounts++;
+            }
 
             if (! $this->option('force') && ! $this->isDue($site)) {
-                $this->line("Skipping {$site->site_url}: its interval is not due.");
+                if (! $this->option('scheduled')) {
+                    $this->line("Skipping {$site->site_url}: its interval is not due.");
+                }
 
                 continue;
             }
@@ -102,6 +120,10 @@ class AutoGenerateSiteContent extends Command
             }
         }
 
+        if ($this->option('scheduled') && $scheduledAccounts === 0) {
+            return self::SUCCESS;
+        }
+
         $this->info($this->option('dry-run')
             ? 'Dry run completed. No content was started.'
             : "{$started} content generation task(s) completed or started; {$failed} failed.");
@@ -116,8 +138,16 @@ class AutoGenerateSiteContent extends Command
         }
 
         $days = max(1, (int) $site->auto_content_interval_days);
+        $timezone = app(AccountAutomationScheduleService::class)->defaultTimezone();
+        $lastRunDate = $site->auto_content_last_run_at
+            ->copy()
+            ->timezone($timezone)
+            ->startOfDay();
+        $dueDate = now($timezone)
+            ->startOfDay()
+            ->subDays($days);
 
-        return $site->auto_content_last_run_at->lte(now()->subDays($days));
+        return $lastRunDate->lte($dueDate);
     }
 
     private function candidateKeywords(GscSite $site): Builder

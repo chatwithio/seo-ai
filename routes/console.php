@@ -11,7 +11,12 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::call(function () {
-    $sites = GscSite::where('is_active', true)->get();
+    $sites = GscSite::where('is_active', true)
+        ->whereDoesntHave(
+            'googleOauthToken',
+            fn ($query) => $query->where('is_onboarding', true),
+        )
+        ->get();
     foreach ($sites as $site) {
         dispatch(new ImportGscKeywordsJob($site->id));
     }
@@ -34,9 +39,9 @@ Schedule::call(function () {
     }
 })->dailyAt('06:00');
 
-Schedule::command('seo:auto-generate-content')
-    ->dailyAt('06:30')
-    ->withoutOverlapping()
+Schedule::command('seo:auto-generate-content --scheduled')
+    ->everyMinute()
+    ->withoutOverlapping(10)
     ->appendOutputTo(storage_path('logs/auto-content.log'));
 
 Schedule::command('seo:send-weekly-emails')

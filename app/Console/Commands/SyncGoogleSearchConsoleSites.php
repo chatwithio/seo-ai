@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\GoogleOauthToken;
 use App\Models\GscSite;
 use App\Models\SeoAuditLog;
+use App\Services\AccountOnboardingService;
 use App\Services\BackgroundTaskManager;
 use App\Services\GoogleSearchConsoleService;
 use Illuminate\Console\Command;
@@ -20,8 +21,10 @@ class SyncGoogleSearchConsoleSites extends Command
 
     protected $description = 'Sync Google Search Console sites for one user';
 
-    public function handle(GoogleSearchConsoleService $service): int
-    {
+    public function handle(
+        GoogleSearchConsoleService $service,
+        AccountOnboardingService $onboarding,
+    ): int {
         $userId = (int) $this->option('user-id');
 
         if ($userId < 1) {
@@ -80,6 +83,7 @@ class SyncGoogleSearchConsoleSites extends Command
 
         $syncedCount = 0;
         $failedAccounts = 0;
+        $successfulTokens = collect();
 
         try {
             foreach ($tokens as $index => $token) {
@@ -115,6 +119,7 @@ class SyncGoogleSearchConsoleSites extends Command
                             'status_text' => "Found {$syncedCount} site(s)...",
                         ]);
                     }
+                    $successfulTokens->push($token);
                 } catch (\Throwable $exception) {
                     $failedAccounts++;
 
@@ -146,6 +151,26 @@ class SyncGoogleSearchConsoleSites extends Command
                 return self::FAILURE;
             }
 
+            foreach ($successfulTokens as $token) {
+                $onboarding->markSitesSynced($token);
+
+                if (! $token->fresh()->is_onboarding) {
+                    continue;
+                }
+
+                $sites = $token->sites()->where('is_active', true)->get();
+
+                if ($sites->count() === 1) {
+                    $site = $sites->first();
+                    $onboarding->selectSites($token, [$site->id]);
+                    $this->startSiteKeywordImport(
+                        $userId,
+                        (int) $site->id,
+                        (int) config('onboarding.initial_import_days', 90),
+                    );
+                }
+            }
+
             if ($importDays !== null) {
                 BackgroundTaskManager::update($lockKey, [
                     'status_text' => "Sites synced. Starting {$importDays}-day keyword import...",
@@ -162,6 +187,18 @@ class SyncGoogleSearchConsoleSites extends Command
         } finally {
             BackgroundTaskManager::unregister($lockKey);
         }
+    }
+
+    private function startSiteKeywordImport(int $userId, int $siteId, int $days): void
+    {
+        $php = (new PhpExecutableFinder)->find(false) ?: 'php';
+
+        exec(
+            'cd '.escapeshellarg(base_path())
+            .' && '.escapeshellarg($php)
+            ." artisan seo:import-all-gsc --user-id={$userId} --site-id={$siteId} --days={$days}"
+            .' >> '.escapeshellarg(storage_path('logs/onboarding-import.log')).' 2>&1 &',
+        );
     }
 
     private function startKeywordImport(int $userId, int $tokenId, int $days): void

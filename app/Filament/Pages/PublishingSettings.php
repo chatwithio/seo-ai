@@ -4,10 +4,12 @@ namespace App\Filament\Pages;
 
 use App\Filament\Clusters\Settings;
 use App\Models\PublishingSetting;
+use App\Services\AccountOnboardingService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -64,6 +66,7 @@ class PublishingSettings extends Page
                 'content_api_key',
                 'auto_publish_enabled',
                 'auto_publish_multiple_channels',
+                'automation_publish_time',
                 'general_webhook_enabled',
                 'general_webhook_url',
                 'general_webhook_secret',
@@ -91,10 +94,16 @@ class PublishingSettings extends Page
     {
         return $schema
             ->components([
-                Section::make('Automatic Publishing')
-                    ->description('Deliver every newly generated article automatically using your enabled publishing methods.')
-                    ->icon('heroicon-o-bolt')
+                Section::make('Automation Schedule & Publishing')
+                    ->description('Choose when this account creates scheduled content. If auto-publishing is enabled, each finished article is delivered immediately.')
+                    ->icon('heroicon-o-clock')
                     ->schema([
+                        TimePicker::make('automation_publish_time')
+                            ->label('Daily automation time')
+                            ->seconds(false)
+                            ->displayFormat('H:i')
+                            ->required()
+                            ->helperText(fn (): string => 'New accounts receive a staggered, non-round time automatically. All times use the system timezone: '.config('app.timezone', 'UTC').'.'),
                         Toggle::make('auto_publish_enabled')
                             ->label('Auto-publish new articles')
                             ->helperText('Publishing starts immediately after a new AI article is generated.')
@@ -280,6 +289,7 @@ class PublishingSettings extends Page
                     'content_api_key',
                     'auto_publish_enabled',
                     'auto_publish_multiple_channels',
+                    'automation_publish_time',
                     'general_webhook_enabled',
                     'general_webhook_url',
                     'general_webhook_secret',
@@ -296,6 +306,7 @@ class PublishingSettings extends Page
                 'content_api_key_hash' => filled($apiCode) ? hash('sha256', $apiCode) : null,
             ],
         );
+        app(AccountOnboardingService::class)->markPublishingReviewedForUser((int) auth()->id());
 
         Notification::make()
             ->title('Publishing settings saved')

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\GscKeywordMetric;
 use App\Models\GscSite;
 use App\Models\SeoAuditLog;
+use App\Services\AccountOnboardingService;
 use App\Services\BackgroundTaskManager;
 use App\Services\GoogleSearchConsoleService;
 use Illuminate\Console\Command;
@@ -22,8 +23,10 @@ class ImportAllSearchConsoleKeywords extends Command
 
     protected $description = 'Import a configurable date range of GSC keywords for one user, Google account, or site';
 
-    public function handle(GoogleSearchConsoleService $gscService)
-    {
+    public function handle(
+        GoogleSearchConsoleService $gscService,
+        AccountOnboardingService $onboarding,
+    ) {
         $userId = $this->option('user-id');
         $siteId = $this->option('site-id');
         $tokenId = $this->option('token-id');
@@ -216,6 +219,7 @@ class ImportAllSearchConsoleKeywords extends Command
                     });
 
                     $site->update(['last_imported_at' => now()]);
+                    $onboarding->markImportProgress($site->fresh());
 
                     $allSitesImportedRows += $totalImported;
 

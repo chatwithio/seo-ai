@@ -25,6 +25,15 @@ class Dashboard extends BaseDashboard
 
     protected string $view = 'filament.pages.dashboard';
 
+    public function mount(): void
+    {
+        $tokens = GoogleOauthToken::where('user_id', Auth::id());
+
+        if (! $tokens->exists() || (clone $tokens)->where('is_onboarding', true)->exists()) {
+            $this->redirect(Onboarding::getUrl());
+        }
+    }
+
     public function getTokens()
     {
         return GoogleOauthToken::where('user_id', Auth::id())->get();

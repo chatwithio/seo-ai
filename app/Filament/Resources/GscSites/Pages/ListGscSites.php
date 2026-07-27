@@ -27,6 +27,10 @@ class ListGscSites extends ListRecords
                 })
                 ->icon('heroicon-o-cloud-arrow-down')
                 ->color('warning')
+                ->visible(fn (): bool => ! GoogleOauthToken::query()
+                    ->where('user_id', auth()->id())
+                    ->where('is_onboarding', true)
+                    ->exists())
                 ->disabled(fn (): bool => BackgroundTaskManager::findActiveForUser((int) auth()->id(), 'Import GSC Keywords') !== null)
                 ->requiresConfirmation()
                 ->action(function () {

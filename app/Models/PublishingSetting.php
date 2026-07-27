@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AccountAutomationScheduleService;
 use Illuminate\Database\Eloquent\Model;
 
 class PublishingSetting extends Model
@@ -25,5 +26,15 @@ class PublishingSetting extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (PublishingSetting $settings): void {
+            $schedules = app(AccountAutomationScheduleService::class);
+
+            $settings->automation_publish_time ??= $schedules->randomTime();
+            $settings->automation_timezone ??= $schedules->defaultTimezone();
+        });
     }
 }

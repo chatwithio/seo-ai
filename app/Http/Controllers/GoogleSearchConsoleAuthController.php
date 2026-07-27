@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GoogleOauthToken;
+use App\Services\AccountOnboardingService;
 use Google\Client;
 use Google\Service\Oauth2;
 use GuzzleHttp\HandlerStack;
@@ -20,7 +21,7 @@ class GoogleSearchConsoleAuthController extends Controller
         return redirect()->away($authUrl);
     }
 
-    public function callback(Request $request)
+    public function callback(Request $request, AccountOnboardingService $onboarding)
     {
         if (! $request->has('code')) {
             return redirect('/admin')->with('error', 'Google OAuth failed.');
@@ -64,25 +65,24 @@ class GoogleSearchConsoleAuthController extends Controller
                 'scope' => $token['scope'] ?? null,
             ]
         );
+        $onboarding->start($googleToken);
 
         if ($userId > 0) {
             $php = (new PhpExecutableFinder)->find(false) ?: 'php';
             $basePath = base_path();
             $tokenId = (int) $googleToken->id;
-            $importOption = $existing ? '' : ' --import-days=90';
-
             exec(
                 'cd '.escapeshellarg($basePath)
                 .' && '.escapeshellarg($php)
-                ." artisan seo:sync-gsc-sites --user-id={$userId} --token-id={$tokenId}{$importOption} > /dev/null 2>&1 &",
+                ." artisan seo:sync-gsc-sites --user-id={$userId} --token-id={$tokenId} > /dev/null 2>&1 &",
             );
         }
 
         $message = $existing
             ? 'Google account reconnected. Refreshing its Search Console sites now...'
-            : 'Google account connected. Syncing its sites, then importing the latest 90 days of keywords automatically.';
+            : 'Google account connected. We are checking which Search Console sites you can access.';
 
-        return redirect('/admin/gsc-sites')->with('success', $message);
+        return redirect('/admin/onboarding')->with('success', $message);
     }
 
     private function getClient(): Client

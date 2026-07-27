@@ -13,6 +13,7 @@ class SeoContentGenerationService
         protected SeoPromptService $promptService,
         protected LlmContentService $llmService,
         protected ContentPublishingService $publishingService,
+        protected AccountOnboardingService $onboardingService,
     ) {}
 
     public function generateBrief(SeoKeywordGroup $group, array $options = [])
@@ -146,6 +147,10 @@ PROMPT;
 
         if ($draft->wasRecentlyCreated && ($options['auto_publish'] ?? true)) {
             $this->publishingService->publishAutomatically($draft);
+        }
+
+        if ($draft->wasRecentlyCreated) {
+            $this->onboardingService->markFirstContentGenerated($draft);
         }
 
         return $draft;

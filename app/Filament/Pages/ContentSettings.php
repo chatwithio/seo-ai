@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Clusters\Settings;
 use App\Models\GscSite;
+use App\Services\AccountOnboardingService;
 use BackedEnum;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -110,6 +111,7 @@ class ContentSettings extends Page
                 'grouping_limit',
             ]));
         }
+        app(AccountOnboardingService::class)->markContentSettingsReviewedForUser((int) auth()->id());
 
         Notification::make()
             ->title('Content settings saved')
