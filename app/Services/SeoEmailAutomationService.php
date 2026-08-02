@@ -5,9 +5,9 @@ namespace App\Services;
 use App\Models\EmailTemplate;
 use App\Models\PublishingSetting;
 use App\Models\SeoAuditLog;
-use App\Models\SeoContentDraft;
 use App\Models\SeoKeyword;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Number;
 use Throwable;
@@ -27,14 +27,11 @@ class SeoEmailAutomationService
             return false;
         }
 
-        $keywords = SeoKeyword::where('user_id', $user->id);
-
-        return $this->sendTemplate($user, 'weekly_activity', [
-            'keyword_count' => Number::format((clone $keywords)->count()),
-            'impressions' => Number::format((int) (clone $keywords)->sum('total_impressions')),
-            'clicks' => Number::format((int) (clone $keywords)->sum('total_clicks')),
-            'article_count' => Number::format(SeoContentDraft::where('user_id', $user->id)->count()),
-        ]);
+        return $this->sendTemplate(
+            $user,
+            'weekly_activity',
+            app(WeeklySeoActivityService::class)->forUser($user->id),
+        );
     }
 
     public function sendWeeklyIdeas(User $user): bool
@@ -48,18 +45,42 @@ class SeoEmailAutomationService
         $ideasService = app(WeeklySeoIdeasService::class);
         $ideas = $ideasService->forUser($user->id);
 
-        $ideasHtml = $ideas->isEmpty()
-            ? '<p>No new keyword opportunities were found this week.</p>'
-            : '<ul>'.$ideas->map(function (SeoKeyword $keyword) use ($ideasService): string {
-                return '<li><strong>'.e($keyword->query_text).'</strong> — '
-                    .Number::format($keyword->total_impressions).' impressions, '
-                    .Number::format($keyword->total_clicks).' clicks '
-                    .'— <a href="'.e($ideasService->keywordUrl($keyword)).'">View keyword</a></li>';
-            })->implode('').'</ul>';
+        $competitiveIdeas = $ideas->take(3);
+        $lowerTrafficIdeas = $ideas->slice(3, 3);
+        $emptyMessage = '<p>No new keyword opportunities were found for this section this week.</p>';
+
+        $competitiveIdeasHtml = $competitiveIdeas->isEmpty()
+            ? $emptyMessage
+            : $this->ideasList($competitiveIdeas, $ideasService);
+
+        $lowerTrafficIdeasHtml = $lowerTrafficIdeas->isEmpty()
+            ? $emptyMessage
+            : $this->ideasList($lowerTrafficIdeas, $ideasService);
 
         return $this->sendTemplate($user, 'weekly_ideas', [
-            'ideas_html' => $ideasHtml,
+            'competitive_ideas_html' => $competitiveIdeasHtml,
+            'lower_traffic_ideas_html' => $lowerTrafficIdeasHtml,
+            'ideas_html' => $this->ideasList($ideas, $ideasService),
         ]);
+    }
+
+    /**
+     * @param  Collection<int, SeoKeyword>  $ideas
+     */
+    private function ideasList(Collection $ideas, WeeklySeoIdeasService $ideasService): string
+    {
+        if ($ideas->isEmpty()) {
+            return '<p>No new keyword opportunities were found this week.</p>';
+        }
+
+        return '<ul style="margin: 8px 0 20px; padding-left: 22px;">'
+            .$ideas->map(function (SeoKeyword $keyword) use ($ideasService): string {
+                return '<li style="margin-bottom: 10px;"><strong>'.e($keyword->query_text).'</strong><br>'
+                    .'<span style="color: #4b5563;">'.Number::format($keyword->total_impressions).' impressions · '
+                    .Number::format($keyword->total_clicks).' clicks</span><br>'
+                    .'<a href="'.e($ideasService->keywordUrl($keyword)).'">View keyword</a></li>';
+            })->implode('')
+            .'</ul>';
     }
 
     private function sendTemplate(User $user, string $templateKey, array $variables): bool
@@ -79,6 +100,7 @@ class SeoEmailAutomationService
             'login_url' => url('/users/login'),
             'dashboard_url' => url('/admin'),
             'keywords_url' => url('/admin/seo-keywords'),
+            'email_settings_url' => url('/admin/settings/email'),
             'support_url' => 'https://chatwith.io/s/link-to-whatsapp',
             'youtube_url' => 'https://www.youtube.com/@LinktoWhatsApp',
             ...$variables,

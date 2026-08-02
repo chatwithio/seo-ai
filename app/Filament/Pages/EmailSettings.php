@@ -84,7 +84,7 @@ class EmailSettings extends Page
                                 Livewire::make(EmailTemplatesTable::class)
                                     ->key('email-templates-table'),
                                 Section::make('Available placeholders')
-                                    ->description('{name}, {app_name}, {url}, {login_url}, {dashboard_url}, {keywords_url}, {support_url}, {youtube_url}, {keyword_count}, {impressions}, {clicks}, {article_count}, {ideas_html}')
+                                    ->description('{name}, {app_name}, {url}, {login_url}, {dashboard_url}, {keywords_url}, {email_settings_url}, {support_url}, {youtube_url}, {activity_period}, {keyword_count}, {keyword_change}, {impressions}, {impressions_change}, {clicks}, {clicks_change}, {competitive_ideas_html}, {lower_traffic_ideas_html}, {ideas_html}')
                                     ->schema([]),
                             ]),
                     ])
