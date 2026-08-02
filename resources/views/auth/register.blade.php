@@ -40,6 +40,7 @@
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .stats-row {
+            grid-template-columns: minmax(7.5rem, max-content) 2rem minmax(0, 1fr);
             transition: background-color 200ms ease, border-color 200ms ease;
         }
         .stats-row:hover {
@@ -48,6 +49,12 @@
         @media (prefers-reduced-motion: reduce) {
             .stats-live-ping {
                 animation: none !important;
+            }
+        }
+        @media (max-width: 420px) {
+            .stats-row {
+                grid-template-columns: minmax(6.5rem, max-content) 2rem minmax(0, 1fr);
+                column-gap: 0.5rem;
             }
         }
     </style>
@@ -172,8 +179,8 @@
                     </div>
 
                     <div class="divide-y divide-white/[0.06]">
-                        <div class="stats-row grid grid-cols-[3rem_2rem_minmax(0,1fr)] items-center gap-3 py-3">
-                            <span class="text-right text-2xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['accounts']) }}</span>
+                        <div class="stats-row grid items-center gap-3 py-3">
+                            <span class="text-right text-xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['accounts']) }}</span>
                             <span class="flex size-8 items-center justify-center rounded-lg bg-indigo-400/10" aria-hidden="true">
                                 <svg width="17" height="17" class="shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#818cf8" stroke-linecap="round" stroke-linejoin="round" focusable="false">
                                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -183,8 +190,8 @@
                             </span>
                             <span class="text-sm font-medium text-gray-200">Accounts Created</span>
                         </div>
-                        <div class="stats-row grid grid-cols-[3rem_2rem_minmax(0,1fr)] items-center gap-3 py-3">
-                            <span class="text-right text-2xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['keywords']) }}</span>
+                        <div class="stats-row grid items-center gap-3 py-3">
+                            <span class="text-right text-xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['keywords']) }}</span>
                             <span class="flex size-8 items-center justify-center rounded-lg bg-emerald-400/10" aria-hidden="true">
                                 <svg width="17" height="17" class="shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#34d399" stroke-linecap="round" stroke-linejoin="round" focusable="false">
                                     <circle cx="11" cy="11" r="8" />
@@ -193,8 +200,8 @@
                             </span>
                             <span class="text-sm font-medium text-gray-200">Keywords Scanned</span>
                         </div>
-                        <div class="stats-row grid grid-cols-[3rem_2rem_minmax(0,1fr)] items-center gap-3 py-3">
-                            <span class="text-right text-2xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['articles']) }}</span>
+                        <div class="stats-row grid items-center gap-3 py-3">
+                            <span class="text-right text-xl font-semibold tabular-nums leading-none text-white">{{ number_format($platformCounters['articles']) }}</span>
                             <span class="flex size-8 items-center justify-center rounded-lg bg-amber-400/10" aria-hidden="true">
                                 <svg width="17" height="17" class="shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#fbbf24" stroke-linecap="round" stroke-linejoin="round" focusable="false">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
