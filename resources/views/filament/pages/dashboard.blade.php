@@ -8,6 +8,7 @@
         $latestImportAt = $this->getLatestImportAt();
         $topKeywords = $this->getTopKeywords();
         $opportunityKeywords = $this->getOpportunityKeywords();
+        $weeklyIdeas = $this->getWeeklyIdeas();
         $importTask = $this->getImportTask();
         $siteSyncTask = $this->getSiteSyncTask();
     @endphp
@@ -39,6 +40,43 @@
                     </div>
                 @endforeach
             </div>
+        @endif
+
+        @if ($tokens->isNotEmpty())
+            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6" aria-labelledby="weekly-seo-ideas-title">
+                <div>
+                    <h2 id="weekly-seo-ideas-title" class="text-lg font-bold text-gray-950 dark:text-white">New ideas for your SEO content</h2>
+                    <p class="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                        Hello {{ Auth::user()->name }}, here are keyword opportunities and content ideas tailored to your account:
+                    </p>
+                </div>
+
+                @if ($weeklyIdeas->isNotEmpty())
+                    <ul class="mt-4 divide-y divide-gray-100 border-y border-gray-100 dark:divide-gray-800 dark:border-gray-800">
+                        @foreach ($weeklyIdeas as $idea)
+                            <li class="flex items-start gap-3 py-3 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                                <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" aria-hidden="true"></span>
+                                <div>
+                                    <strong class="font-semibold text-gray-950 dark:text-white">{{ $idea->query_text }}</strong>
+                                    <span class="text-gray-600 dark:text-gray-400"> — {{ number_format($idea->total_impressions) }} impressions, {{ number_format($idea->total_clicks) }} clicks — </span>
+                                    <a href="{{ $this->getWeeklyIdeaUrl($idea) }}" class="cursor-pointer whitespace-nowrap font-semibold text-primary-600 underline decoration-primary-300 underline-offset-4 transition-colors duration-200 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 motion-reduce:transition-none dark:text-primary-400 dark:hover:text-primary-300">
+                                        View keyword
+                                    </a>
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+
+                    <a href="{{ $this->getOpportunityKeywordsUrl() }}" class="mt-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-primary-600 underline decoration-primary-300 underline-offset-4 transition-colors duration-200 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 motion-reduce:transition-none dark:text-primary-400 dark:hover:text-primary-300">
+                        Review all SEO opportunities
+                        <x-filament::icon icon="heroicon-m-arrow-right" class="h-4 w-4" />
+                    </a>
+                @else
+                    <div class="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
+                        No new opportunities this week. Import fresh Search Console data to check again.
+                    </div>
+                @endif
+            </section>
         @endif
 
         <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">

@@ -45,21 +45,16 @@ class SeoEmailAutomationService
             return false;
         }
 
-        $ideas = SeoKeyword::query()
-            ->contentOpportunitiesForUser($user->id)
-            ->orderByDesc('total_impressions')
-            ->limit(6)
-            ->get();
+        $ideasService = app(WeeklySeoIdeasService::class);
+        $ideas = $ideasService->forUser($user->id);
 
         $ideasHtml = $ideas->isEmpty()
             ? '<p>No new keyword opportunities were found this week.</p>'
-            : '<ul>'.$ideas->map(function (SeoKeyword $keyword): string {
-                $url = url('/admin/seo-keywords').'?search='.urlencode($keyword->query_text);
-
+            : '<ul>'.$ideas->map(function (SeoKeyword $keyword) use ($ideasService): string {
                 return '<li><strong>'.e($keyword->query_text).'</strong> — '
                     .Number::format($keyword->total_impressions).' impressions, '
                     .Number::format($keyword->total_clicks).' clicks '
-                    .'— <a href="'.e($url).'">View keyword</a></li>';
+                    .'— <a href="'.e($ideasService->keywordUrl($keyword)).'">View keyword</a></li>';
             })->implode('').'</ul>';
 
         return $this->sendTemplate($user, 'weekly_ideas', [

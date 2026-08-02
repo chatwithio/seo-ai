@@ -12,6 +12,8 @@
         body {
             font-family: 'Outfit', sans-serif;
             background-color: #080c14;
+            color: #f3f4f6;
+            color-scheme: dark;
         }
         .glow-orb {
             position: absolute;

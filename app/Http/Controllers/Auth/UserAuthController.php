@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\SeoContentDraft;
+use App\Models\SeoKeyword;
 use App\Models\User;
 use App\Services\SeoEmailAutomationService;
 use Illuminate\Http\Request;
@@ -18,7 +20,13 @@ class UserAuthController extends Controller
             return redirect('/admin');
         }
 
-        return view('auth.register');
+        return view('auth.register', [
+            'platformCounters' => [
+                'accounts' => User::query()->count(),
+                'keywords' => SeoKeyword::query()->count(),
+                'articles' => SeoContentDraft::query()->count(),
+            ],
+        ]);
     }
 
     public function register(Request $request, SeoEmailAutomationService $emailService)

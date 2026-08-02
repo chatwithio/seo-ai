@@ -10,6 +10,7 @@ use App\Models\GscSite;
 use App\Models\SeoContentDraft;
 use App\Models\SeoKeyword;
 use App\Services\BackgroundTaskManager;
+use App\Services\WeeklySeoIdeasService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
@@ -71,6 +72,16 @@ class Dashboard extends BaseDashboard
             ->orderByDesc('total_impressions')
             ->limit(5)
             ->get();
+    }
+
+    public function getWeeklyIdeas()
+    {
+        return app(WeeklySeoIdeasService::class)->forUser((int) Auth::id());
+    }
+
+    public function getWeeklyIdeaUrl(SeoKeyword $keyword): string
+    {
+        return app(WeeklySeoIdeasService::class)->keywordUrl($keyword);
     }
 
     public function getManagedSitesCount(): int
