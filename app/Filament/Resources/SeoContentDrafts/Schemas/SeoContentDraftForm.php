@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SeoContentDrafts\Schemas;
 use App\Models\SeoContentBrief;
 use App\Models\SeoKeywordGroup;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -164,6 +165,26 @@ class SeoContentDraftForm
                                             ])
                                             ->default('draft')
                                             ->required(),
+                                    ]),
+
+                                Section::make('Featured Image')
+                                    ->description('Upload your own image or use Generate Image from the Articles list.')
+                                    ->schema([
+                                        FileUpload::make('featured_image_path')
+                                            ->label('Article image')
+                                            ->image()
+                                            ->imageEditor()
+                                            ->disk(config('seo_agent.images.disk', 'public'))
+                                            ->directory(fn (): string => 'seo-articles/'.auth()->id())
+                                            ->visibility('public')
+                                            ->maxSize(10240),
+                                        TextInput::make('featured_image_alt')
+                                            ->label('Image alt text')
+                                            ->maxLength(250),
+                                        TextInput::make('featured_image_status')
+                                            ->label('Image status')
+                                            ->disabled()
+                                            ->dehydrated(false),
                                     ]),
 
                                 Section::make('Publication Details')

@@ -7,6 +7,8 @@ use App\Models\SeoKeyword;
 use App\Models\SeoKeywordGroup;
 use App\Models\SeoKeywordGroupKeyword;
 use App\Services\BackgroundTaskManager;
+use App\Services\ArticleImageService;
+use App\Services\ContentPublishingService;
 use App\Services\SeoContentGenerationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -26,8 +28,11 @@ class GenerateBulkContent extends Command
 
     protected $description = 'Generate content from selected keywords or an existing keyword group';
 
-    public function handle(SeoContentGenerationService $generationService)
-    {
+    public function handle(
+        SeoContentGenerationService $generationService,
+        ContentPublishingService $publishingService,
+        ArticleImageService $imageService,
+    ) {
         $keywordIdsStr = $this->option('keyword-ids');
         $groupId = (int) $this->option('group-id');
 
@@ -114,7 +119,7 @@ class GenerateBulkContent extends Command
         BackgroundTaskManager::update($lockKey, [
             'status_text' => 'Preparing content plan...',
             'progress_current' => 0,
-            'progress_total' => 3,
+            'progress_total' => 4,
             'progress_percent' => 0,
         ]);
         SeoKeyword::whereIn('id', $keywords->pluck('id'))->update([
@@ -150,7 +155,7 @@ class GenerateBulkContent extends Command
             BackgroundTaskManager::update($lockKey, [
                 'status_text' => 'Creating the content plan...',
                 'progress_current' => 1,
-                'progress_percent' => 33,
+                'progress_percent' => 25,
             ]);
             $brief = $generationService->generateBrief($group, [
                 'language' => $options['language'],
@@ -160,23 +165,45 @@ class GenerateBulkContent extends Command
             BackgroundTaskManager::update($lockKey, [
                 'status_text' => 'Writing the article...',
                 'progress_current' => 2,
-                'progress_percent' => 66,
+                'progress_percent' => 50,
             ]);
             $draft = $generationService->generateDraft($brief, [
                 'density' => $options['density'],
                 'length' => $options['length'],
                 'hint' => $options['hint'],
                 'language' => $options['language'],
-                'auto_publish' => ! $this->option('skip-auto-publish'),
             ]);
 
-            $this->info('Step 3: Reviewing draft...');
+            $this->info('Step 3: Generating featured image...');
+            BackgroundTaskManager::update($lockKey, [
+                'status_text' => 'Creating the featured image...',
+                'progress_current' => 3,
+                'progress_percent' => 70,
+            ]);
+            $imageService->generate($draft);
+
+            $this->info('Step 4: Reviewing draft...');
             BackgroundTaskManager::update($lockKey, [
                 'status_text' => 'Reviewing the article...',
-                'progress_current' => 3,
+                'progress_current' => 4,
                 'progress_percent' => 90,
             ]);
-            $generationService->reviewDraft($draft);
+            $reviewedDraft = $generationService->reviewDraft($draft);
+            $reviewStatus = $reviewedDraft->status;
+            $publishingResult = [
+                'attempted' => [],
+                'succeeded' => [],
+                'failed' => [],
+            ];
+
+            if (! $this->option('skip-auto-publish') && $reviewedDraft->status === 'approved') {
+                BackgroundTaskManager::update($lockKey, [
+                    'status_text' => 'Publishing approved article...',
+                    'progress_current' => 4,
+                    'progress_percent' => 95,
+                ]);
+                $publishingResult = $publishingService->publishAutomatically($reviewedDraft);
+            }
 
             SeoKeyword::whereIn('id', $keywords->pluck('id'))->update([
                 'content_generation_status' => SeoKeyword::CONTENT_COMPLETED,
@@ -185,7 +212,7 @@ class GenerateBulkContent extends Command
 
             BackgroundTaskManager::update($lockKey, [
                 'status_text' => 'Article ready',
-                'progress_current' => 3,
+                'progress_current' => 4,
                 'progress_percent' => 100,
             ]);
 
@@ -201,6 +228,8 @@ class GenerateBulkContent extends Command
                     'language' => $options['language'],
                     'density' => $options['density'],
                     'length' => $options['length'],
+                    'review_status' => $reviewStatus,
+                    'publishing' => $publishingResult,
                 ],
             ]);
 

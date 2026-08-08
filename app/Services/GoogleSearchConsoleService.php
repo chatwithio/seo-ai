@@ -199,4 +199,57 @@ class GoogleSearchConsoleService
             throw $e;
         }
     }
+
+    /**
+     * Fetch page-level performance without the much larger keyword/country/device dimensions.
+     *
+     * @return array<int, array{page: string, clicks: float, impressions: float, ctr: float, position: float}>
+     */
+    public function fetchPagePerformanceForRange(
+        string $siteUrl,
+        string $startDate,
+        string $endDate,
+        int $startRow = 0,
+        int $rowLimit = 1000,
+        ?GoogleOauthToken $tokenModel = null,
+    ): array {
+        $client = $this->makeClient($tokenModel);
+        $service = new SearchConsole($client);
+
+        $request = new SearchAnalyticsQueryRequest;
+        $request->setStartDate($startDate);
+        $request->setEndDate($endDate);
+        $request->setDimensions(['page']);
+        $request->setType('web');
+        $request->setRowLimit($rowLimit);
+        $request->setStartRow($startRow);
+
+        try {
+            $response = $service->searchanalytics->query($siteUrl, $request);
+            $result = [];
+
+            foreach ($response->getRows() ?: [] as $row) {
+                $keys = $row->getKeys();
+                $result[] = [
+                    'page' => (string) ($keys[0] ?? ''),
+                    'clicks' => (float) $row->getClicks(),
+                    'impressions' => (float) $row->getImpressions(),
+                    'ctr' => (float) $row->getCtr(),
+                    'position' => (float) $row->getPosition(),
+                ];
+            }
+
+            return $result;
+        } catch (Exception $e) {
+            SeoAuditLog::create([
+                'user_id' => $tokenModel?->user_id,
+                'entity_type' => 'content_improvement',
+                'action' => 'page_performance_fetch_failed',
+                'message' => $e->getMessage(),
+                'context' => compact('siteUrl', 'startDate', 'endDate', 'startRow'),
+            ]);
+
+            throw $e;
+        }
+    }
 }

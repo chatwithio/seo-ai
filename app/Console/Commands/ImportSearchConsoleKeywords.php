@@ -7,6 +7,7 @@ use App\Models\GscSite;
 use App\Models\SeoAuditLog;
 use App\Services\GoogleSearchConsoleService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 class ImportSearchConsoleKeywords extends Command
 {
@@ -60,8 +61,12 @@ class ImportSearchConsoleKeywords extends Command
                         [
                             'site_id' => $site->id,
                             'report_date' => $date,
-                            'query_text' => substr($row['query'], 0, 191),
-                            'page_url' => substr($row['page'], 0, 191),
+                            'query_text' => Str::limit(
+                                mb_convert_encoding((string) $row['query'], 'UTF-8', 'UTF-8'),
+                                500,
+                                '',
+                            ),
+                            'page_url' => mb_convert_encoding((string) $row['page'], 'UTF-8', 'UTF-8'),
                             'country' => $row['country'],
                             'device' => $row['device'],
                         ],

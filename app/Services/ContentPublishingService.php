@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\ContentPublicationAttempt;
 use App\Models\PublishingSetting;
 use App\Models\SeoAuditLog;
 use App\Models\SeoContentDraft;
+use App\Models\SitePublishingConnection;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -13,6 +15,11 @@ use Throwable;
 
 class ContentPublishingService
 {
+    public function __construct(
+        protected WixPublishingService $wix,
+        protected PublicationRetryPolicy $retryPolicy,
+    ) {}
+
     /**
      * Automatically deliver a newly generated article using the user's
      * configured priority and delivery behavior.
@@ -25,6 +32,8 @@ class ContentPublishingService
      */
     public function publishAutomatically(SeoContentDraft $draft): array
     {
+        $draft->refresh();
+
         $settings = PublishingSetting::where('user_id', $draft->user_id)->first();
         $result = [
             'attempted' => [],
@@ -32,11 +41,30 @@ class ContentPublishingService
             'failed' => [],
         ];
 
-        if (! $settings?->auto_publish_enabled) {
+        // Automatic delivery is only allowed after the AI review explicitly
+        // approves the article. This also makes retries idempotent once a
+        // successful channel has marked the article as published.
+        if (! $settings || ! $this->retryPolicy->canRun(
+            $draft->status,
+            (bool) $settings->auto_publish_enabled,
+            (bool) $settings->auto_publish_multiple_channels,
+        )) {
             return $result;
         }
 
-        foreach ($this->orderedAutomaticChannels($settings) as $channel) {
+        $channels = $this->orderedAutomaticChannels($settings, $draft);
+
+        if ($settings->auto_publish_multiple_channels) {
+            $successfulChannels = ContentPublicationAttempt::query()
+                ->where('seo_content_draft_id', $draft->id)
+                ->where('content_version', max(1, (int) $draft->content_version))
+                ->where('status', 'succeeded')
+                ->pluck('channel')
+                ->all();
+            $channels = $this->retryPolicy->pendingChannels($channels, $successfulChannels, true);
+        }
+
+        foreach ($channels as $channel) {
             $result['attempted'][] = $channel;
 
             try {
@@ -55,11 +83,12 @@ class ContentPublishingService
     }
 
     /**
-     * @return array{message: string, published_url: ?string}
+     * @return array{message: string, published_url: ?string, external_id?: ?string, already_delivered?: bool}
      */
     public function publish(SeoContentDraft $draft, string $channel): array
     {
-        $draft->loadMissing(['brief', 'group.site']);
+        $draft->loadMissing(['brief', 'site', 'group.site']);
+        $draft->site_id ??= $draft->group?->site_id;
 
         $settings = PublishingSetting::where('user_id', $draft->user_id)->first();
 
@@ -67,13 +96,54 @@ class ContentPublishingService
             throw new RuntimeException('Publishing Settings have not been configured.');
         }
 
+        $version = max(1, (int) $draft->content_version);
+        $fingerprint = $this->requestFingerprint($draft, $channel);
+        $attempt = ContentPublicationAttempt::firstOrCreate(
+            [
+                'seo_content_draft_id' => $draft->id,
+                'content_version' => $version,
+                'channel' => $channel,
+            ],
+            [
+                'user_id' => $draft->user_id,
+                'site_id' => $draft->site_id,
+                'status' => 'pending',
+                'request_fingerprint' => $fingerprint,
+            ],
+        );
+
+        if ($attempt->status === 'succeeded') {
+            return [
+                'message' => 'This article version was already delivered through this method.',
+                'published_url' => $attempt->external_url,
+                'external_id' => $attempt->external_id,
+                'already_delivered' => true,
+            ];
+        }
+
+        $attempt->update([
+            'status' => 'processing',
+            'request_fingerprint' => $fingerprint,
+            'error' => null,
+            'attempted_at' => now(),
+        ]);
+
         try {
             $result = match ($channel) {
                 'general_webhook' => $this->publishToGeneralWebhook($draft, $settings),
                 'wordpress_webhook' => $this->publishToWordPressWebhook($draft, $settings),
                 'wordpress_email' => $this->publishToWordPressEmail($draft, $settings),
+                'wix' => $this->publishToWix($draft),
                 default => throw new RuntimeException('Unknown publishing method.'),
             };
+
+            $attempt->update([
+                'status' => 'succeeded',
+                'external_id' => $result['external_id'] ?? null,
+                'external_url' => $result['published_url'] ?? null,
+                'error' => null,
+                'succeeded_at' => now(),
+            ]);
 
             $draft->update([
                 'status' => 'published',
@@ -83,27 +153,32 @@ class ContentPublishingService
 
             SeoAuditLog::create([
                 'user_id' => $draft->user_id,
-                'site_id' => $draft->group?->site_id,
+                'site_id' => $draft->site_id,
                 'entity_type' => 'content_publishing',
                 'entity_id' => $draft->id,
                 'action' => 'content_delivered',
                 'message' => $result['message'],
                 'context' => [
                     'channel' => $channel,
+                    'content_version' => $version,
                     'published_url' => $result['published_url'],
                 ],
             ]);
 
             return $result;
         } catch (Throwable $exception) {
+            $attempt->update([
+                'status' => 'failed',
+                'error' => str($exception->getMessage())->limit(5000, ''),
+            ]);
             SeoAuditLog::create([
                 'user_id' => $draft->user_id,
-                'site_id' => $draft->group?->site_id,
+                'site_id' => $draft->site_id,
                 'entity_type' => 'content_publishing',
                 'entity_id' => $draft->id,
                 'action' => 'content_delivery_failed',
                 'message' => $exception->getMessage(),
-                'context' => ['channel' => $channel],
+                'context' => ['channel' => $channel, 'content_version' => $version],
             ]);
 
             throw $exception;
@@ -113,7 +188,7 @@ class ContentPublishingService
     /**
      * @return array<string, string>
      */
-    public static function availableChannels(PublishingSetting $settings): array
+    public static function availableChannels(PublishingSetting $settings, ?SeoContentDraft $draft = null): array
     {
         $channels = [];
 
@@ -129,20 +204,37 @@ class ContentPublishingService
             $channels['wordpress_email'] = 'WordPress Post by Email';
         }
 
+        if ($draft?->site_id && SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'wix')
+            ->where('is_enabled', true)
+            ->exists()) {
+            $channels['wix'] = 'Wix Blog';
+        }
+
         return $channels;
     }
 
     /**
      * @return array<int, string>
      */
-    public function orderedAutomaticChannels(PublishingSetting $settings): array
+    public function orderedAutomaticChannels(PublishingSetting $settings, ?SeoContentDraft $draft = null): array
     {
         $priorities = [
             'wordpress_email' => (int) ($settings->wordpress_email_priority ?: 10),
             'wordpress_webhook' => (int) ($settings->wordpress_webhook_priority ?: 20),
             'general_webhook' => (int) ($settings->general_webhook_priority ?: 30),
         ];
-        $channels = array_keys(self::availableChannels($settings));
+        $channels = array_keys(self::availableChannels($settings, $draft));
+
+        if (in_array('wix', $channels, true)) {
+            $priorities['wix'] = (int) SitePublishingConnection::query()
+                ->where('user_id', $draft->user_id)
+                ->where('site_id', $draft->site_id)
+                ->where('provider', 'wix')
+                ->value('priority') ?: 40;
+        }
 
         usort(
             $channels,
@@ -200,6 +292,10 @@ class ContentPublishingService
             'primary_keyword' => $draft->brief?->primary_keyword,
             'language' => $draft->language,
             'source_article_id' => $draft->id,
+            'content_version' => max(1, (int) $draft->content_version),
+            'site_id' => $draft->site?->id ?? $draft->group?->site?->id,
+            'source_url' => $draft->source_url,
+            'featured_image' => $this->featuredImagePayload($draft),
         ];
 
         $response = $this->postWebhook(
@@ -224,7 +320,11 @@ class ContentPublishingService
             throw new RuntimeException('WordPress post-by-email is not enabled.');
         }
 
-        Mail::html($draft->html, function ($message) use ($draft, $settings): void {
+        $html = $draft->featured_image_status === 'ready' && $draft->featured_image_url
+            ? '<p><img src="'.e($draft->featured_image_url).'" alt="'.e($draft->featured_image_alt ?: $draft->title).'" /></p>'.$draft->html
+            : $draft->html;
+
+        Mail::html($html, function ($message) use ($draft, $settings): void {
             $message
                 ->to($settings->wordpress_email)
                 ->subject($draft->title);
@@ -246,7 +346,7 @@ class ContentPublishingService
         $headers = [
             'Accept' => 'application/json',
             'X-SEOAI-Event' => $payload['event'],
-            'X-SEOAI-Idempotency-Key' => 'article-'.$draft->id.'-'.$draft->updated_at?->timestamp,
+            'X-SEOAI-Idempotency-Key' => 'article-'.$draft->id.'-v'.max(1, (int) $draft->content_version),
         ];
 
         if (filled($secret)) {
@@ -283,10 +383,14 @@ class ContentPublishingService
             'primary_keyword' => $draft->brief?->primary_keyword,
             'language' => $draft->language,
             'status' => $draft->status,
+            'content_version' => max(1, (int) $draft->content_version),
+            'site_id' => $draft->site?->id ?? $draft->group?->site?->id,
+            'source_url' => $draft->source_url,
+            'featured_image' => $this->featuredImagePayload($draft),
             'site' => [
-                'id' => $draft->group?->site?->id,
-                'url' => $draft->group?->site?->site_url,
-                'name' => $draft->group?->site?->name,
+                'id' => $draft->site?->id ?? $draft->group?->site?->id,
+                'url' => $draft->site?->site_url ?? $draft->group?->site?->site_url,
+                'name' => $draft->site?->name ?? $draft->group?->site?->name,
             ],
             'created_at' => $draft->created_at?->toIso8601String(),
             'updated_at' => $draft->updated_at?->toIso8601String(),
@@ -306,5 +410,52 @@ class ContentPublishingService
             ?? $data['url']
             ?? $data['link']
             ?? null;
+    }
+
+    /**
+     * @return array{url: string, alt: string}|null
+     */
+    private function featuredImagePayload(SeoContentDraft $draft): ?array
+    {
+        if ($draft->featured_image_status !== 'ready' || blank($draft->featured_image_url)) {
+            return null;
+        }
+
+        return [
+            'url' => $draft->featured_image_url,
+            'alt' => $draft->featured_image_alt ?: $draft->title,
+        ];
+    }
+
+    /**
+     * @return array{message: string, published_url: ?string, external_id: string}
+     */
+    private function publishToWix(SeoContentDraft $draft): array
+    {
+        $connection = SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'wix')
+            ->where('is_enabled', true)
+            ->first();
+
+        if (! $connection) {
+            throw new RuntimeException('Wix publishing is not enabled for this article site.');
+        }
+
+        return $this->wix->publish($draft, $connection);
+    }
+
+    private function requestFingerprint(SeoContentDraft $draft, string $channel): string
+    {
+        return hash('sha256', json_encode([
+            'draft_id' => $draft->id,
+            'version' => max(1, (int) $draft->content_version),
+            'channel' => $channel,
+            'title' => $draft->title,
+            'slug' => $draft->slug,
+            'html' => $draft->html,
+            'image' => $draft->featured_image_url,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 }

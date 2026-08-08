@@ -48,6 +48,7 @@ class AggregateSeoKeywords extends Command
                 'total_impressions' => $metric->total_impressions,
                 'avg_ctr' => $avgCtr,
                 'avg_position' => $metric->avg_position,
+                'discovered_at' => $timestamp,
                 'created_at' => $timestamp,
                 'updated_at' => $timestamp,
             ];
@@ -63,6 +64,8 @@ class AggregateSeoKeywords extends Command
         if ($records !== []) {
             $this->upsertKeywords($records);
         }
+
+        $site->update(['keywords_updated_at' => $timestamp]);
 
         $this->info("Aggregation complete. Processed {$count} keywords.");
     }

@@ -74,6 +74,17 @@ class Dashboard extends BaseDashboard
             ->get();
     }
 
+    public function getNewKeywords()
+    {
+        return SeoKeyword::query()
+            ->newlyDiscoveredForUser((int) Auth::id())
+            ->with('site:id,site_url,name')
+            ->orderByDesc('total_impressions')
+            ->orderByDesc('total_clicks')
+            ->limit(5)
+            ->get();
+    }
+
     public function getWeeklyIdeas()
     {
         return app(WeeklySeoIdeasService::class)->forUser((int) Auth::id());
@@ -92,6 +103,11 @@ class Dashboard extends BaseDashboard
     public function getLatestImportAt(): mixed
     {
         return GscSite::where('user_id', Auth::id())->max('last_imported_at');
+    }
+
+    public function getLatestKeywordUpdateAt(): mixed
+    {
+        return GscSite::where('user_id', Auth::id())->max('keywords_updated_at');
     }
 
     public function getImportTask(): ?array

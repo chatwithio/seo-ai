@@ -21,6 +21,7 @@ class SeoKeyword extends Model
     protected $casts = [
         'content_generation_status' => 'integer',
         'content_generated_at' => 'datetime',
+        'discovered_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -85,5 +86,14 @@ class SeoKeyword extends Model
             ->where('total_impressions', '>', 0)
             ->where('total_impressions', '>=', $averages['impressions'])
             ->where('total_clicks', '<=', $averages['clicks']);
+    }
+
+    public function scopeNewlyDiscoveredForUser(Builder $query, int $userId, int $days = 7): Builder
+    {
+        return $query
+            ->where('user_id', $userId)
+            ->whereNotNull('discovered_at')
+            ->where('discovered_at', '>=', now()->subDays(max(1, $days)))
+            ->whereIn('content_generation_status', [self::CONTENT_READY, self::CONTENT_FAILED]);
     }
 }

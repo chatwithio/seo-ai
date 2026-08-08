@@ -12,6 +12,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ImportAllSearchConsoleKeywords extends Command
 {
@@ -195,8 +196,12 @@ class ImportAllSearchConsoleKeywords extends Command
                                 fn (array $row): array => [
                                     'site_id' => $site->id,
                                     'report_date' => $reportDate,
-                                    'query_text' => substr($row['query'], 0, 191),
-                                    'page_url' => substr($row['page'], 0, 191),
+                                    'query_text' => Str::limit(
+                                        mb_convert_encoding((string) $row['query'], 'UTF-8', 'UTF-8'),
+                                        500,
+                                        '',
+                                    ),
+                                    'page_url' => mb_convert_encoding((string) $row['page'], 'UTF-8', 'UTF-8'),
                                     'country' => $row['country'],
                                     'device' => $row['device'],
                                     'clicks' => $row['clicks'],
@@ -216,7 +221,7 @@ class ImportAllSearchConsoleKeywords extends Command
                                 ['clicks', 'impressions', 'ctr', 'position', 'imported_at', 'updated_at'],
                             );
                         }
-                    });
+                    }, 5);
 
                     $site->update(['last_imported_at' => now()]);
                     $onboarding->markImportProgress($site->fresh());

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class SeoContentDraft extends Model
@@ -15,6 +16,8 @@ class SeoContentDraft extends Model
         'quality_checks' => 'array',
         'published_at' => 'datetime',
         'api_read_at' => 'datetime',
+        'content_version' => 'integer',
+        'featured_image_generated_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -40,9 +43,14 @@ class SeoContentDraft extends Model
 
                 if ($brief) {
                     $draft->keyword_group_id = $brief->keyword_group_id;
+                    $draft->site_id ??= $brief->group?->site_id;
                 } else {
                     $draft->brief_id = null;
                 }
+            }
+
+            if (! $draft->site_id && $draft->keyword_group_id) {
+                $draft->site_id = SeoKeywordGroup::whereKey($draft->keyword_group_id)->value('site_id');
             }
 
             if (blank($draft->slug) && filled($draft->title)) {
@@ -51,6 +59,13 @@ class SeoContentDraft extends Model
 
             if ($draft->isDirty('html')) {
                 $draft->plain_text = trim(strip_tags((string) $draft->html));
+            }
+
+            if ($draft->isDirty('featured_image_path') && filled($draft->featured_image_path)) {
+                $draft->featured_image_disk ??= config('seo_agent.images.disk', 'public');
+                $draft->featured_image_url = Storage::disk($draft->featured_image_disk)->url($draft->featured_image_path);
+                $draft->featured_image_status = 'ready';
+                $draft->featured_image_generated_at ??= now();
             }
         });
 
@@ -70,8 +85,21 @@ class SeoContentDraft extends Model
                 'meta_description',
                 'html',
                 'plain_text',
+                'featured_image_path',
+                'featured_image_url',
+                'featured_image_alt',
             ])) {
                 $draft->api_read_at = null;
+
+                $publishedCurrentVersion = ContentPublicationAttempt::query()
+                    ->where('seo_content_draft_id', $draft->id)
+                    ->where('content_version', (int) $draft->getOriginal('content_version'))
+                    ->where('status', 'succeeded')
+                    ->exists();
+
+                if ($publishedCurrentVersion) {
+                    $draft->content_version = max(1, (int) $draft->getOriginal('content_version') + 1);
+                }
             }
         });
     }
@@ -84,5 +112,20 @@ class SeoContentDraft extends Model
     public function group()
     {
         return $this->belongsTo(SeoKeywordGroup::class, 'keyword_group_id');
+    }
+
+    public function site()
+    {
+        return $this->belongsTo(GscSite::class, 'site_id');
+    }
+
+    public function contentImprovement()
+    {
+        return $this->belongsTo(SeoContentImprovement::class, 'content_improvement_id');
+    }
+
+    public function publicationAttempts()
+    {
+        return $this->hasMany(ContentPublicationAttempt::class, 'seo_content_draft_id');
     }
 }

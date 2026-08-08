@@ -12,7 +12,6 @@ class SeoContentGenerationService
     public function __construct(
         protected SeoPromptService $promptService,
         protected LlmContentService $llmService,
-        protected ContentPublishingService $publishingService,
         protected AccountOnboardingService $onboardingService,
     ) {}
 
@@ -145,10 +144,6 @@ PROMPT;
 
         $brief->group->update(['status' => 'draft_generated']);
 
-        if ($draft->wasRecentlyCreated && ($options['auto_publish'] ?? true)) {
-            $this->publishingService->publishAutomatically($draft);
-        }
-
         if ($draft->wasRecentlyCreated) {
             $this->onboardingService->markFirstContentGenerated($draft);
         }
@@ -219,8 +214,15 @@ PROMPT;
     public function reviewDraft(SeoContentDraft $draft)
     {
         $brief = $draft->brief;
+        $reviewContext = $brief?->toArray() ?? [
+            'title' => $draft->title,
+            'meta_title' => $draft->meta_title,
+            'meta_description' => $draft->meta_description,
+            'source_url' => $draft->source_url,
+            'target_keywords' => $draft->contentImprovement?->target_keywords ?? [],
+        ];
         $promptData = $this->promptService->getPrompt('review_content', [
-            'brief' => json_encode($brief->toArray()),
+            'brief' => json_encode($reviewContext),
             'draft' => $draft->html,
         ]);
 
@@ -231,7 +233,7 @@ PROMPT;
         $response = $this->llmService->call(
             $promptData,
             $draft->user_id,
-            $draft->group?->site_id,
+            $draft->site_id ?? $draft->group?->site_id,
         );
         $data = json_decode($response, true);
 
@@ -239,12 +241,16 @@ PROMPT;
             throw new \Exception('Failed to decode JSON from LLM: '.$response);
         }
 
+        $reviewStatus = ($data['is_approved'] ?? false) ? 'approved' : 'needs_review';
+
         $draft->update([
             'quality_checks' => json_encode([
                 'score' => $data['score'] ?? 0,
                 'improvements' => $data['improvements'] ?? [],
             ]),
-            'status' => ($data['is_approved'] ?? false) ? 'approved' : 'needs_review',
+            // A later manual review must never regress an article that has
+            // already been delivered through a publishing channel.
+            'status' => $draft->status === 'published' ? 'published' : $reviewStatus,
         ]);
 
         return $draft;

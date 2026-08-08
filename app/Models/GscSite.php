@@ -18,6 +18,7 @@ class GscSite extends Model
         'content_keyword_density' => 'decimal:1',
         'auto_content_last_run_at' => 'datetime',
         'last_imported_at' => 'datetime',
+        'keywords_updated_at' => 'datetime',
     ];
 
     public function keywords()
@@ -38,6 +39,16 @@ class GscSite extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function contentImprovements()
+    {
+        return $this->hasMany(SeoContentImprovement::class, 'site_id');
+    }
+
+    public function publishingConnections()
+    {
+        return $this->hasMany(SitePublishingConnection::class, 'site_id');
     }
 
     protected static function booted()

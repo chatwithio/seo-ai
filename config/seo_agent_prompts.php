@@ -80,6 +80,36 @@ return [
                     'is_approved' => ['type' => 'boolean']
                 ]
             ]
-        ]
+        ],
+        'improve_content_recommendation' => [
+            'name' => 'Recommend Existing Page Improvements',
+            'description' => 'Suggests a focused SEO improvement for a high-traffic page.',
+            'system_prompt' => 'You are a senior SEO editor. Analyze the current page and Search Console context. Recommend one concrete paragraph that adds missing value without inventing facts. Explain why it helps and identify the search terms it addresses.',
+            'user_prompt' => "Site: {site_url}\nPage: {page_url}\nSearch terms: {target_keywords}\n\nCurrent page content:\n{page_content}\n\nReturn one suggested paragraph, a concise rationale, and target keywords.",
+            'output_format' => [
+                'type' => 'object',
+                'properties' => [
+                    'suggested_paragraph' => ['type' => 'string'],
+                    'rationale' => ['type' => 'string'],
+                    'target_keywords' => ['type' => 'array', 'items' => ['type' => 'string']],
+                ],
+            ],
+        ],
+        'rewrite_existing_content' => [
+            'name' => 'Rewrite Existing Page',
+            'description' => 'Creates a full improved article draft from a current page and recommendation.',
+            'system_prompt' => 'You are a senior SEO editor. Rewrite the supplied page into a complete, helpful, accurate article. Preserve useful facts, improve structure and intent coverage, and use clean semantic HTML with body content only. Never claim that the live page has already changed.',
+            'user_prompt' => "Site: {site_url}\nPage: {page_url}\nLanguage: {language}\nTarget length: {length} words\nTarget keywords: {target_keywords}\nRecommendation: {recommendation}\n\nCurrent page content:\n{page_content}\n\nReturn the improved title, meta title, meta description, complete HTML article, and a short summary of changes.",
+            'output_format' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string'],
+                    'meta_title' => ['type' => 'string'],
+                    'meta_description' => ['type' => 'string'],
+                    'html' => ['type' => 'string'],
+                    'change_summary' => ['type' => 'string'],
+                ],
+            ],
+        ],
     ]
 ];

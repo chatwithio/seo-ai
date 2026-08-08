@@ -45,4 +45,10 @@ return [
         'key' => env('LLM_API_KEY') ?: env('OPENAI_API_KEY'),
     ],
 
+    'mono' => [
+        'base_url' => env('MONO_API_BASE_URL', 'https://qc-api.yggdrasil.dev-mono.net/api/v1'),
+        'token' => env('MONO_API_TOKEN'),
+        'template_id' => env('MONO_TEMPLATE_ID'),
+    ],
+
 ];

@@ -3,16 +3,21 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Clusters\Settings;
+use App\Models\GscSite;
 use App\Models\PublishingSetting;
+use App\Models\SitePublishingConnection;
 use App\Services\AccountOnboardingService;
+use App\Services\WixPublishingService;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -82,6 +87,21 @@ class PublishingSettings extends Page
             ]),
             'content_api_list_url' => url('/api/v1/content'),
             'content_api_unread_url' => url('/api/v1/content/unread'),
+            'wix_connections' => SitePublishingConnection::query()
+                ->where('user_id', auth()->id())
+                ->where('provider', 'wix')
+                ->with('site:id,site_url')
+                ->get()
+                ->map(fn (SitePublishingConnection $connection): array => [
+                    'site_id' => $connection->site_id,
+                    'is_enabled' => $connection->is_enabled,
+                    'priority' => $connection->priority,
+                    'api_key' => $connection->credentials['api_key'] ?? '',
+                    'wix_site_id' => $connection->settings['wix_site_id'] ?? '',
+                    'member_id' => $connection->settings['member_id'] ?? '',
+                    'post_status' => $connection->settings['post_status'] ?? 'draft',
+                ])
+                ->all(),
         ]);
     }
 
@@ -95,7 +115,7 @@ class PublishingSettings extends Page
         return $schema
             ->components([
                 Section::make('Automation Schedule & Publishing')
-                    ->description('Choose when this account creates scheduled content. If auto-publishing is enabled, each finished article is delivered immediately.')
+                    ->description('Choose when this account creates scheduled content. Approved articles can be delivered automatically after the AI quality review.')
                     ->icon('heroicon-o-clock')
                     ->schema([
                         TimePicker::make('automation_publish_time')
@@ -106,7 +126,7 @@ class PublishingSettings extends Page
                             ->helperText(fn (): string => 'New accounts receive a staggered, non-round time automatically. All times use the system timezone: '.config('app.timezone', 'UTC').'.'),
                         Toggle::make('auto_publish_enabled')
                             ->label('Auto-publish new articles')
-                            ->helperText('Publishing starts immediately after a new AI article is generated.')
+                            ->helperText('Publishing starts only after the AI quality review approves the article.')
                             ->live(),
                         Toggle::make('auto_publish_multiple_channels')
                             ->label('Send each article through every enabled method')
@@ -203,6 +223,110 @@ class PublishingSettings extends Page
                                             ->password()
                                             ->revealable()
                                             ->helperText('Optional. Used to create the X-SEOAI-Signature header.'),
+                                    ]),
+                            ]),
+                        Tab::make('Wix')
+                            ->icon('heroicon-o-window')
+                            ->schema([
+                                Section::make('Wix Blog')
+                                    ->description('Connect one managed site to Wix for this account. API keys are encrypted at rest.')
+                                    ->schema([
+                                        Repeater::make('wix_connections')
+                                            ->label('Wix site')
+                                            ->addActionLabel('Connect Wix site')
+                                            ->maxItems(1)
+                                            ->reorderable(false)
+                                            ->collapsible()
+                                            ->itemLabel(fn (array $state): ?string => GscSite::query()
+                                                ->where('user_id', auth()->id())
+                                                ->whereKey($state['site_id'] ?? null)
+                                                ->value('site_url'))
+                                            ->schema([
+                                                Select::make('site_id')
+                                                    ->label('Managed site')
+                                                    ->options(fn (): array => GscSite::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->orderBy('site_url')
+                                                        ->pluck('site_url', 'id')
+                                                        ->all())
+                                                    ->searchable()
+                                                    ->distinct()
+                                                    ->required()
+                                                    ->disableOptionsWhenSelectedInSiblingRepeaterItems(),
+                                                Toggle::make('is_enabled')
+                                                    ->label('Enable Wix publishing')
+                                                    ->live(),
+                                                TextInput::make('priority')
+                                                    ->label('Automatic publishing position')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->maxValue(99)
+                                                    ->default(40)
+                                                    ->required(),
+                                                TextInput::make('api_key')
+                                                    ->label('Wix API key')
+                                                    ->password()
+                                                    ->revealable()
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
+                                                TextInput::make('wix_site_id')
+                                                    ->label('Wix Site ID')
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
+                                                TextInput::make('member_id')
+                                                    ->label('Wix Blog member ID')
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
+                                                    ->helperText('Wix requires the author member ID for third-party draft posts.'),
+                                                Select::make('post_status')
+                                                    ->label('Wix post status')
+                                                    ->options([
+                                                        'draft' => 'Create or update a draft',
+                                                        'publish' => 'Publish immediately',
+                                                    ])
+                                                    ->default('draft')
+                                                    ->required(),
+                                            ])
+                                            ->columns([
+                                                'default' => 1,
+                                                'xl' => 2,
+                                            ]),
+                                        Actions::make([
+                                            Action::make('testWixConnection')
+                                                ->label('Test Wix connection')
+                                                ->icon('heroicon-o-signal')
+                                                ->color('info')
+                                                ->form([
+                                                    Select::make('site_id')
+                                                        ->label('Wix-connected site')
+                                                        ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->where('user_id', auth()->id())
+                                                            ->where('provider', 'wix')
+                                                            ->where('is_enabled', true)
+                                                            ->with('site:id,site_url')
+                                                            ->get()
+                                                            ->pluck('site.site_url', 'site_id')
+                                                            ->all())
+                                                        ->required(),
+                                                ])
+                                                ->action(function (array $data, WixPublishingService $wix): void {
+                                                    $connection = SitePublishingConnection::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->where('site_id', (int) $data['site_id'])
+                                                        ->where('provider', 'wix')
+                                                        ->where('is_enabled', true)
+                                                        ->firstOrFail();
+
+                                                    try {
+                                                        $message = $wix->testConnection($connection);
+                                                        Notification::make()->title('Wix connection works')->body($message)->success()->send();
+                                                    } catch (\Throwable $exception) {
+                                                        $connection->update([
+                                                            'last_tested_at' => now(),
+                                                            'last_test_status' => 'failed',
+                                                            'last_test_message' => Str::limit($exception->getMessage(), 1000, ''),
+                                                        ]);
+                                                        Notification::make()->title('Wix connection failed')->body($exception->getMessage())->danger()->send();
+                                                    }
+                                                }),
+                                        ])->alignStart(),
                                     ]),
                             ]),
                         Tab::make('WordPress Webhook')
@@ -306,6 +430,32 @@ class PublishingSettings extends Page
                 'content_api_key_hash' => filled($apiCode) ? hash('sha256', $apiCode) : null,
             ],
         );
+
+        SitePublishingConnection::query()
+            ->where('user_id', auth()->id())
+            ->where('provider', 'wix')
+            ->update(['is_enabled' => false]);
+
+        foreach ($data['wix_connections'] ?? [] as $connectionData) {
+            $site = GscSite::query()
+                ->where('user_id', auth()->id())
+                ->findOrFail((int) ($connectionData['site_id'] ?? 0));
+
+            SitePublishingConnection::updateOrCreate(
+                ['user_id' => auth()->id(), 'provider' => 'wix'],
+                [
+                    'site_id' => $site->id,
+                    'is_enabled' => (bool) ($connectionData['is_enabled'] ?? false),
+                    'priority' => (int) ($connectionData['priority'] ?? 40),
+                    'credentials' => ['api_key' => (string) ($connectionData['api_key'] ?? '')],
+                    'settings' => [
+                        'wix_site_id' => (string) ($connectionData['wix_site_id'] ?? ''),
+                        'member_id' => (string) ($connectionData['member_id'] ?? ''),
+                        'post_status' => (string) ($connectionData['post_status'] ?? 'draft'),
+                    ],
+                ],
+            );
+        }
         app(AccountOnboardingService::class)->markPublishingReviewedForUser((int) auth()->id());
 
         Notification::make()
@@ -335,9 +485,12 @@ class PublishingSettings extends Page
             'wordpress_email' => (bool) ($data['wordpress_email_enabled'] ?? false),
         ])->filter();
 
-        if ($enabledMethods->isEmpty()) {
+        $enabledWixConnections = collect($data['wix_connections'] ?? [])
+            ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
+
+        if ($enabledMethods->isEmpty() && $enabledWixConnections->isEmpty()) {
             throw ValidationException::withMessages([
-                'data.auto_publish_enabled' => 'Enable at least one webhook or WordPress email method before turning on automatic publishing.',
+                'data.auto_publish_enabled' => 'Enable at least one publishing method before turning on automatic publishing.',
             ]);
         }
 
@@ -349,6 +502,16 @@ class PublishingSettings extends Page
             throw ValidationException::withMessages([
                 'data.auto_publish_enabled' => 'Each enabled publishing method must have a different automatic publishing position.',
             ]);
+        }
+
+        foreach ($enabledWixConnections as $index => $connection) {
+            $wixPriority = (int) ($connection['priority'] ?? 0);
+
+            if ($priorities->contains($wixPriority)) {
+                throw ValidationException::withMessages([
+                    "data.wix_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
+                ]);
+            }
         }
     }
 }

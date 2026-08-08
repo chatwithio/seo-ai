@@ -18,7 +18,7 @@ class ContentFeedController extends Controller
         $limit = max(1, min((int) $request->integer('limit', 20), 100));
 
         $articles = $this->publishableQuery($settings)
-            ->with(['brief', 'group.site'])
+            ->with(['brief', 'site', 'group.site'])
             ->latest('id')
             ->limit($limit)
             ->get();
@@ -53,7 +53,7 @@ class ContentFeedController extends Controller
 
             $article->updateQuietly(['api_read_at' => now()]);
 
-            return $article->load(['brief', 'group.site']);
+            return $article->load(['brief', 'site', 'group.site']);
         });
 
         if (! $article) {
@@ -114,11 +114,20 @@ class ContentFeedController extends Controller
             'primary_keyword' => $article->brief?->primary_keyword,
             'language' => $article->language,
             'status' => $article->status,
+            'content_version' => max(1, (int) $article->content_version),
+            'site_id' => $article->site?->id ?? $article->group?->site?->id,
+            'source_url' => $article->source_url,
+            'featured_image' => $article->featured_image_status === 'ready' && $article->featured_image_url
+                ? [
+                    'url' => $article->featured_image_url,
+                    'alt' => $article->featured_image_alt ?: $article->title,
+                ]
+                : null,
             'read_at' => $article->api_read_at?->toIso8601String(),
             'site' => [
-                'id' => $article->group?->site?->id,
-                'name' => $article->group?->site?->name,
-                'url' => $article->group?->site?->site_url,
+                'id' => $article->site?->id ?? $article->group?->site?->id,
+                'name' => $article->site?->name ?? $article->group?->site?->name,
+                'url' => $article->site?->site_url ?? $article->group?->site?->site_url,
             ],
             'created_at' => $article->created_at?->toIso8601String(),
             'updated_at' => $article->updated_at?->toIso8601String(),

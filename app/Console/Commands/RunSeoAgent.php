@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\GscSite;
 use App\Models\SeoContentBrief;
 use App\Models\SeoKeywordGroup;
+use App\Services\ContentPublishingService;
+use App\Services\ArticleImageService;
 use App\Services\KeywordGroupingService;
 use App\Services\SeoContentGenerationService;
 use Illuminate\Console\Command;
@@ -17,7 +19,9 @@ class RunSeoAgent extends Command
 
     public function handle(
         KeywordGroupingService $groupingService,
-        SeoContentGenerationService $generationService
+        SeoContentGenerationService $generationService,
+        ContentPublishingService $publishingService,
+        ArticleImageService $imageService,
     ) {
         $siteId = $this->argument('site_id');
         $site = GscSite::findOrFail($siteId);
@@ -59,12 +63,21 @@ class RunSeoAgent extends Command
         foreach ($newBriefs as $brief) {
             try {
                 $draft = $generationService->generateDraft($brief);
+                $imageService->generate($draft);
                 $this->info("Draft generated: {$draft->title}");
 
                 // 4. Audit/Review draft immediately
                 $this->info("Step 4: Auditing draft ID {$draft->id}...");
                 $reviewed = $generationService->reviewDraft($draft);
                 $this->info("Draft audited. Status: {$reviewed->status}");
+
+                if ($reviewed->status === 'approved') {
+                    $result = $publishingService->publishAutomatically($reviewed);
+
+                    if ($result['succeeded'] !== []) {
+                        $this->info('Published through: '.implode(', ', $result['succeeded']));
+                    }
+                }
             } catch (\Exception $e) {
                 $this->error("Failed to process draft/review for brief {$brief->title}: ".$e->getMessage());
             }

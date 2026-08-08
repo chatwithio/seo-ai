@@ -11,7 +11,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'email_verified_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,6 +27,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'articles_last_viewed_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -34,6 +35,31 @@ class User extends Authenticatable
     public function publishingSetting()
     {
         return $this->hasOne(PublishingSetting::class);
+    }
+
+    public function sitePublishingConnections()
+    {
+        return $this->hasMany(SitePublishingConnection::class);
+    }
+
+    public function sites()
+    {
+        return $this->hasMany(GscSite::class);
+    }
+
+    public function keywords()
+    {
+        return $this->hasMany(SeoKeyword::class);
+    }
+
+    public function contentDrafts()
+    {
+        return $this->hasMany(SeoContentDraft::class);
+    }
+
+    public function temporaryLoginLinks()
+    {
+        return $this->hasMany(TemporaryUserLoginLink::class);
     }
 
     protected static function booted(): void

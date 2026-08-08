@@ -135,9 +135,23 @@ class BackgroundTaskManager
 
     private static function updateRegistry(callable $callback): void
     {
-        Cache::lock(self::$registryKey.':mutex', 10)->block(5, function () use ($callback) {
+        $lockPath = storage_path('framework/cache/seo-active-tasks.lock');
+        $handle = fopen($lockPath, 'c+');
+
+        if ($handle === false) {
+            throw new \RuntimeException('Unable to open the background-task registry lock.');
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                throw new \RuntimeException('Unable to lock the background-task registry.');
+            }
+
             $tasks = Cache::get(self::$registryKey, []);
             Cache::forever(self::$registryKey, $callback($tasks));
-        });
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 }

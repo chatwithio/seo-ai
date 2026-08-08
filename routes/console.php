@@ -49,6 +49,12 @@ Schedule::command('seo:send-weekly-emails')
     ->at('09:00')
     ->withoutOverlapping();
 
+Schedule::command('seo:refresh-content-improvements')
+    ->mondays()
+    ->at('05:00')
+    ->withoutOverlapping(180)
+    ->appendOutputTo(storage_path('logs/content-improvements.log'));
+
 Schedule::command('queue:work --stop-when-empty --sleep=1 --tries=1 --timeout=1800 --max-time=1740')
     ->everyMinute()
     ->withoutOverlapping(35)

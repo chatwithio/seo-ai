@@ -55,4 +55,33 @@ class SeoContentDraftResource extends Resource
     {
         return parent::getEloquentQuery()->where('user_id', auth()->id());
     }
+
+    public static function getNavigationBadge(): ?string
+    {
+        if (! auth()->check()) {
+            return null;
+        }
+
+        $lastViewedAt = auth()->user()->articles_last_viewed_at;
+        $count = SeoContentDraft::query()
+            ->where('user_id', auth()->id())
+            ->when($lastViewedAt, fn (Builder $query) => $query->where('created_at', '>', $lastViewedAt))
+            ->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        return $count > 99 ? '99+' : (string) $count;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'New articles since your last visit';
+    }
 }
