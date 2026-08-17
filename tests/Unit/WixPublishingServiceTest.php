@@ -45,4 +45,18 @@ class WixPublishingServiceTest extends TestCase
         $service = new WixPublishingService;
         $this->assertSame([], $service->listMembers('', ''));
     }
+
+    public function test_build_fallback_ricos_document_generates_valid_nodes(): void
+    {
+        $service = new WixPublishingService;
+        $html = '<h2>SEO Guide</h2><p>This is an intro paragraph.</p>';
+
+        $document = $service->buildFallbackRicosDocument($html);
+
+        $this->assertIsArray($document);
+        $this->assertArrayHasKey('nodes', $document);
+        $this->assertCount(2, $document['nodes']);
+        $this->assertSame('HEADING', $document['nodes'][0]['type']);
+        $this->assertSame('PARAGRAPH', $document['nodes'][1]['type']);
+    }
 }

@@ -274,11 +274,12 @@ class PublishingSettings extends Page
                                                     ->live(onBlur: true)
                                                     ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
                                                 Select::make('member_id')
-                                                    ->label('Wix Blog member (Author)')
+                                                    ->label('Wix Blog author (Optional)')
+                                                    ->placeholder('Admin / Site Owner (Default)')
                                                     ->searchable()
                                                     ->createOptionUsing(fn (string $input): string => trim($input))
                                                     ->createOptionAction(fn (Action $action) => $action->modalHeading('Enter Custom Member ID'))
-                                                    ->helperText('Select a member from Wix, or click the refresh icon to pull the latest 10 members.')
+                                                    ->helperText('Optional. Leave empty to publish as the site Admin / Owner, or pick a specific author.')
                                                     ->options(function (Get $get, WixPublishingService $wix): array {
                                                         $apiKey = (string) ($get('api_key') ?? '');
                                                         $siteId = (string) ($get('wix_site_id') ?? '');
@@ -305,7 +306,7 @@ class PublishingSettings extends Page
                                                         Action::make('fetchWixMembers')
                                                             ->label('Refresh members')
                                                             ->icon('heroicon-o-arrow-path')
-                                                            ->tooltip('Fetch last 10 members from Wix')
+                                                            ->tooltip('Fetch last 10 members or blog authors from Wix')
                                                             ->action(function (Get $get, Set $set, WixPublishingService $wix): void {
                                                                 $apiKey = (string) ($get('api_key') ?? '');
                                                                 $siteId = (string) ($get('wix_site_id') ?? '');
@@ -324,22 +325,17 @@ class PublishingSettings extends Page
                                                                     $members = $wix->listMembers($apiKey, $siteId, 10);
                                                                     if (empty($members)) {
                                                                         Notification::make()
-                                                                            ->title('No Wix members found')
-                                                                            ->body('Could not retrieve members. Ensure your Wix API key has Members read permissions.')
-                                                                            ->warning()
+                                                                            ->title('No specific member accounts found')
+                                                                            ->body('No separate member accounts found. Posts will automatically publish under the site Admin / Owner.')
+                                                                            ->info()
                                                                             ->send();
 
                                                                         return;
                                                                     }
 
-                                                                    if (blank($get('member_id'))) {
-                                                                        $firstId = array_key_first($members);
-                                                                        $set('member_id', $firstId);
-                                                                    }
-
                                                                     Notification::make()
-                                                                        ->title('Wix members loaded')
-                                                                        ->body('Retrieved '.count($members).' member(s) from Wix.')
+                                                                        ->title('Wix authors loaded')
+                                                                        ->body('Retrieved '.count($members).' author/member(s) from Wix.')
                                                                         ->success()
                                                                         ->send();
                                                                 } catch (\Throwable $e) {
@@ -350,8 +346,7 @@ class PublishingSettings extends Page
                                                                         ->send();
                                                                 }
                                                             })
-                                                    )
-                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
+                                                    ),
                                                 Select::make('post_status')
                                                     ->label('Wix post status')
                                                     ->options([
