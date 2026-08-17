@@ -267,14 +267,91 @@ class PublishingSettings extends Page
                                                     ->label('Wix API key')
                                                     ->password()
                                                     ->revealable()
+                                                    ->live(onBlur: true)
                                                     ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
                                                 TextInput::make('wix_site_id')
                                                     ->label('Wix Site ID')
+                                                    ->live(onBlur: true)
                                                     ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
-                                                TextInput::make('member_id')
-                                                    ->label('Wix Blog member ID')
-                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
-                                                    ->helperText('Wix requires the author member ID for third-party draft posts.'),
+                                                Select::make('member_id')
+                                                    ->label('Wix Blog member (Author)')
+                                                    ->searchable()
+                                                    ->createOptionUsing(fn (string $input): string => trim($input))
+                                                    ->createOptionAction(fn (Action $action) => $action->modalHeading('Enter Custom Member ID'))
+                                                    ->helperText('Select a member from Wix, or click the refresh icon to pull the latest 10 members.')
+                                                    ->options(function (Get $get, WixPublishingService $wix): array {
+                                                        $apiKey = (string) ($get('api_key') ?? '');
+                                                        $siteId = (string) ($get('wix_site_id') ?? '');
+                                                        $current = (string) ($get('member_id') ?? '');
+
+                                                        $options = [];
+                                                        if (filled($current)) {
+                                                            $options[$current] = "Selected: {$current}";
+                                                        }
+
+                                                        if (blank($apiKey) || blank($siteId)) {
+                                                            return $options;
+                                                        }
+
+                                                        try {
+                                                            $fetched = $wix->listMembers($apiKey, $siteId, 10);
+
+                                                            return array_replace($options, $fetched);
+                                                        } catch (\Throwable) {
+                                                            return $options;
+                                                        }
+                                                    })
+                                                    ->suffixAction(
+                                                        Action::make('fetchWixMembers')
+                                                            ->label('Refresh members')
+                                                            ->icon('heroicon-o-arrow-path')
+                                                            ->tooltip('Fetch last 10 members from Wix')
+                                                            ->action(function (Get $get, Set $set, WixPublishingService $wix): void {
+                                                                $apiKey = (string) ($get('api_key') ?? '');
+                                                                $siteId = (string) ($get('wix_site_id') ?? '');
+
+                                                                if (blank($apiKey) || blank($siteId)) {
+                                                                    Notification::make()
+                                                                        ->title('Wix API Key and Site ID required')
+                                                                        ->body('Please enter your Wix API key and Wix Site ID first.')
+                                                                        ->warning()
+                                                                        ->send();
+
+                                                                    return;
+                                                                }
+
+                                                                try {
+                                                                    $members = $wix->listMembers($apiKey, $siteId, 10);
+                                                                    if (empty($members)) {
+                                                                        Notification::make()
+                                                                            ->title('No Wix members found')
+                                                                            ->body('Could not retrieve members. Ensure your Wix API key has Members read permissions.')
+                                                                            ->warning()
+                                                                            ->send();
+
+                                                                        return;
+                                                                    }
+
+                                                                    if (blank($get('member_id'))) {
+                                                                        $firstId = array_key_first($members);
+                                                                        $set('member_id', $firstId);
+                                                                    }
+
+                                                                    Notification::make()
+                                                                        ->title('Wix members loaded')
+                                                                        ->body('Retrieved '.count($members).' member(s) from Wix.')
+                                                                        ->success()
+                                                                        ->send();
+                                                                } catch (\Throwable $e) {
+                                                                    Notification::make()
+                                                                        ->title('Failed to fetch Wix members')
+                                                                        ->body($e->getMessage())
+                                                                        ->danger()
+                                                                        ->send();
+                                                                }
+                                                            })
+                                                    )
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
                                                 Select::make('post_status')
                                                     ->label('Wix post status')
                                                     ->options([

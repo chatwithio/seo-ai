@@ -104,6 +104,100 @@ class WixPublishingService
         ];
     }
 
+    /**
+     * Fetch the last active/created members from Wix site (up to limit).
+     *
+     * @return array<string, string> Map of memberId => Label (Name / Email)
+     */
+    public function listMembers(SitePublishingConnection|string $connectionOrApiKey, ?string $siteId = null, int $limit = 10): array
+    {
+        if ($connectionOrApiKey instanceof SitePublishingConnection) {
+            $apiKey = (string) ($connectionOrApiKey->credentials['api_key'] ?? '');
+            $siteId = (string) ($connectionOrApiKey->settings['wix_site_id'] ?? '');
+        } else {
+            $apiKey = (string) $connectionOrApiKey;
+            $siteId = (string) $siteId;
+        }
+
+        if (blank($apiKey) || blank($siteId)) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 50));
+
+        $client = Http::baseUrl(self::BASE_URL)
+            ->connectTimeout(10)
+            ->timeout(20)
+            ->acceptJson()
+            ->withHeaders([
+                'Authorization' => $apiKey,
+                'wix-site-id' => $siteId,
+            ]);
+
+        // 1. Try Wix Members v1 query endpoint
+        $response = $client->post('/members/v1/members/query', [
+            'query' => [
+                'paging' => [
+                    'limit' => $limit,
+                ],
+                'sort' => [
+                    [
+                        'fieldName' => 'createdDate',
+                        'order' => 'DESC',
+                    ],
+                ],
+            ],
+        ]);
+
+        if (! $response->successful()) {
+            // Fallback 1: Query without explicit sort
+            $response = $client->post('/members/v1/members/query', [
+                'paging' => ['limit' => $limit],
+            ]);
+        }
+
+        if (! $response->successful()) {
+            // Fallback 2: GET /members/v1/members
+            $response = $client->get('/members/v1/members', [
+                'paging.limit' => $limit,
+            ]);
+        }
+
+        $members = $response->json('members') ?? [];
+        $options = [];
+
+        foreach ($members as $member) {
+            $id = (string) ($member['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+
+            $firstName = $member['contact']['firstName'] ?? '';
+            $lastName = $member['contact']['lastName'] ?? '';
+            $contactName = trim("{$firstName} {$lastName}");
+
+            $name = trim((string) (
+                $member['profile']['nickname']
+                ?? ($contactName !== '' ? $contactName : null)
+                ?? $member['profile']['slug']
+                ?? ''
+            ));
+            $email = trim((string) ($member['loginEmail'] ?? ($member['contact']['emails'][0] ?? '')));
+
+            if ($name !== '' && $email !== '') {
+                $options[$id] = "{$name} ({$email})";
+            } elseif ($name !== '') {
+                $options[$id] = $name;
+            } elseif ($email !== '') {
+                $options[$id] = $email;
+            } else {
+                $options[$id] = "Member {$id}";
+            }
+        }
+
+        return $options;
+    }
+
     public function testConnection(SitePublishingConnection $connection): string
     {
         $ricosResponse = $this->request($connection)

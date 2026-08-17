@@ -8,4 +8,5 @@ Route::prefix('v1/content')
     ->group(function (): void {
         Route::get('/', [ContentFeedController::class, 'index']);
         Route::get('/unread', [ContentFeedController::class, 'nextUnread']);
+        Route::post('/{id}/publish', [ContentFeedController::class, 'publish']);
     });

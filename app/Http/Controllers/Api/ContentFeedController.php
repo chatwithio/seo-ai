@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\PublishingSetting;
 use App\Models\SeoContentDraft;
+use App\Services\ContentPublishingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +42,7 @@ class ContentFeedController extends Controller
         $settings = $this->authenticate($request);
 
         $article = DB::transaction(function () use ($settings): ?SeoContentDraft {
+            /** @var SeoContentDraft|null $article */
             $article = $this->publishableQuery($settings)
                 ->whereNull('api_read_at')
                 ->oldest('id')
@@ -73,6 +75,46 @@ class ContentFeedController extends Controller
                     ->count(),
             ],
         ]);
+    }
+
+    public function publish(Request $request, int $id, ContentPublishingService $publisher): JsonResponse
+    {
+        $settings = $this->authenticate($request);
+        $channel = (string) ($request->input('channel') ?: 'wix');
+
+        $draft = SeoContentDraft::query()
+            ->where('user_id', $settings->user_id)
+            ->whereKey($id)
+            ->first();
+
+        if (! $draft) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Article draft not found.',
+            ], 404);
+        }
+
+        try {
+            $result = $publisher->publish($draft, $channel);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $draft->id,
+                    'title' => $draft->title,
+                    'channel' => $channel,
+                    'status' => $draft->fresh()->status,
+                    'external_id' => $result['external_id'] ?? null,
+                    'published_url' => $result['published_url'] ?? null,
+                    'message' => $result['message'] ?? 'Content delivered successfully.',
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     private function authenticate(Request $request): PublishingSetting
