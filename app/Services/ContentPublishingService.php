@@ -197,15 +197,15 @@ class ContentPublishingService
         $channels = [];
 
         if ($settings->general_webhook_enabled && filled($settings->general_webhook_url)) {
-            $channels['general_webhook'] = 'General Website Webhook';
+            $channels['general_webhook'] = '🌐 General Website Webhook';
         }
 
         if ($settings->wordpress_webhook_enabled && filled($settings->wordpress_webhook_url)) {
-            $channels['wordpress_webhook'] = 'WordPress Webhook';
+            $channels['wordpress_webhook'] = '⚡ WordPress Webhook (Direct API)';
         }
 
         if ($settings->wordpress_email_enabled && filled($settings->wordpress_email)) {
-            $channels['wordpress_email'] = 'WordPress Post by Email';
+            $channels['wordpress_email'] = '✉️ WordPress Post by Email';
         }
 
         if ($draft?->site_id && SitePublishingConnection::query()
@@ -214,7 +214,7 @@ class ContentPublishingService
             ->where('provider', 'wix')
             ->where('is_enabled', true)
             ->exists()) {
-            $channels['wix'] = 'Wix Blog';
+            $channels['wix'] = '✨ Wix Blog';
         }
 
         if ($draft?->site_id && SitePublishingConnection::query()
@@ -223,7 +223,7 @@ class ContentPublishingService
             ->whereIn('provider', ['mono', 'mono_blog'])
             ->where('is_enabled', true)
             ->exists()) {
-            $channels['mono_blog'] = 'Mono Blog';
+            $channels['mono_blog'] = '📝 Mono Blog (SiteAPI)';
         }
 
         if ($draft?->site_id && SitePublishingConnection::query()
@@ -232,7 +232,7 @@ class ContentPublishingService
             ->where('provider', 'mono_site')
             ->where('is_enabled', true)
             ->exists()) {
-            $channels['mono_site'] = 'Mono Site (Quick Creator)';
+            $channels['mono_site'] = '🏗️ Mono Site (Quick Creator)';
         }
 
         return $channels;

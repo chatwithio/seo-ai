@@ -175,93 +175,77 @@ class PublishingSettings extends Page
                     ->columnSpanFull(),
                 Tabs::make('Publishing methods')
                     ->persistTabInQueryString()
-                    ->tabs(array_reverse([
-                        Tab::make('Content API')
-                            ->icon('heroicon-o-code-bracket')
+                    ->scrollable()
+                    ->tabs([
+                        Tab::make('WordPress Webhook')
+                            ->icon('brand-wordpress')
+                            ->badge('REST')
                             ->schema([
-                                Section::make('Content Pull API')
-                                    ->description('Let another website request generated articles using a private API code.')
+                                Section::make('WordPress Webhook')
+                                    ->description('Send WordPress-shaped post fields to WP Webhooks or another WordPress listener.')
                                     ->schema([
-                                        Toggle::make('content_api_enabled')
-                                            ->label('Enable Content API'),
-                                        TextInput::make('content_api_key')
-                                            ->label('API Code')
-                                            ->password()
-                                            ->revealable()
-                                            ->readOnly()
-                                            ->copyable(copyMessage: 'API code copied')
-                                            ->suffixAction(
-                                                Action::make('regenerateContentApiCode')
-                                                    ->label('Regenerate')
-                                                    ->icon('heroicon-o-arrow-path')
-                                                    ->requiresConfirmation()
-                                                    ->modalDescription('The current API code will stop working immediately.')
-                                                    ->action(function (Set $set): void {
-                                                        $apiCode = $this->newApiCode();
-
-                                                        PublishingSetting::where('user_id', auth()->id())->update([
-                                                            'content_api_key' => encrypt($apiCode),
-                                                            'content_api_key_hash' => hash('sha256', $apiCode),
-                                                        ]);
-
-                                                        $set('content_api_key', $apiCode);
-
-                                                        Notification::make()
-                                                            ->title('API code regenerated')
-                                                            ->success()
-                                                            ->send();
-                                                    }),
-                                            )
-                                            ->helperText('Send this in the X-API-Code request header. Keep it private.'),
-                                        TextInput::make('content_api_list_url')
-                                            ->label('List all publishable content')
-                                            ->readOnly()
-                                            ->copyable()
-                                            ->dehydrated(false),
-                                        TextInput::make('content_api_unread_url')
-                                            ->label('Read next unread content')
-                                            ->readOnly()
-                                            ->copyable()
-                                            ->dehydrated(false)
-                                            ->helperText('Each request returns one unread article and marks it read.'),
-                                    ])
-                                    ->columns([
-                                        'default' => 1,
-                                        'xl' => 2,
-                                    ]),
-                            ]),
-                        Tab::make('General Webhook')
-                            ->icon('heroicon-o-globe-alt')
-                            ->schema([
-                                Section::make('General Website Webhook')
-                                    ->description('Send a neutral JSON article payload to any website or application.')
-                                    ->schema([
-                                        Toggle::make('general_webhook_enabled')
-                                            ->label('Enable general webhook')
+                                        Toggle::make('wordpress_webhook_enabled')
+                                            ->label('Enable WordPress webhook')
                                             ->live(),
-                                        TextInput::make('general_webhook_priority')
+                                        TextInput::make('wordpress_webhook_priority')
                                             ->label('Automatic publishing position')
                                             ->numeric()
                                             ->minValue(1)
                                             ->maxValue(99)
-                                            ->default(30)
-                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
-                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
+                                            ->default(20)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
                                             ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
-                                        TextInput::make('general_webhook_url')
-                                            ->label('Webhook URL')
+                                        TextInput::make('wordpress_webhook_url')
+                                            ->label('WordPress webhook URL')
                                             ->url()
-                                            ->placeholder('https://example.com/webhooks/seo-content')
-                                            ->required(fn (Get $get): bool => (bool) $get('general_webhook_enabled')),
-                                        TextInput::make('general_webhook_secret')
+                                            ->placeholder('https://example.com/wp-json/.../webhook')
+                                            ->required(fn (Get $get): bool => (bool) $get('wordpress_webhook_enabled')),
+                                        TextInput::make('wordpress_webhook_secret')
                                             ->label('Signing secret')
                                             ->password()
                                             ->revealable()
-                                            ->helperText('Optional. Used to create the X-SEOAI-Signature header.'),
+                                            ->helperText('Optional. Configure the same secret in the WordPress webhook receiver.'),
+                                        Select::make('wordpress_post_status')
+                                            ->label('WordPress post status')
+                                            ->options([
+                                                'publish' => 'Publish immediately',
+                                                'draft' => 'Create as draft',
+                                            ])
+                                            ->default('publish')
+                                            ->required(),
                                     ]),
                             ]),
-                        Tab::make('Wix')
-                            ->icon('heroicon-o-window')
+                        Tab::make('WordPress Email')
+                            ->icon('brand-wordpress-email')
+                            ->badge('Email')
+                            ->schema([
+                                Section::make('WordPress Post by Email')
+                                    ->description('WordPress can create a post from an email. Enter the private address configured in WordPress Writing settings.')
+                                    ->schema([
+                                        Toggle::make('wordpress_email_enabled')
+                                            ->label('Enable WordPress post by email')
+                                            ->live(),
+                                        TextInput::make('wordpress_email_priority')
+                                            ->label('Automatic publishing position')
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(99)
+                                            ->default(10)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
+                                            ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
+                                        TextInput::make('wordpress_email')
+                                            ->label('Private WordPress publishing email')
+                                            ->email()
+                                            ->placeholder('private-post-address@example.com')
+                                            ->required(fn (Get $get): bool => (bool) $get('wordpress_email_enabled'))
+                                            ->helperText('Keep this address private. The article title becomes the email subject and the article HTML becomes the message body.'),
+                                    ]),
+                            ]),
+                        Tab::make('Wix Blog')
+                            ->icon('brand-wix')
+                            ->badge('Wix')
                             ->schema([
                                 Section::make('Wix Blog')
                                     ->description('Connect one managed site to Wix for this account. API keys are encrypted at rest.')
@@ -303,43 +287,34 @@ class PublishingSettings extends Page
                                                     ->password()
                                                     ->revealable()
                                                     ->live(onBlur: true)
-                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
+                                                    ->helperText('Create an API key in Wix Studio Workspace Settings.'),
                                                 TextInput::make('wix_site_id')
                                                     ->label('Wix Site ID')
                                                     ->live(onBlur: true)
-                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled')),
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
+                                                    ->helperText('Found in your Wix dashboard URL or site settings.'),
                                                 Select::make('member_id')
                                                     ->label('Wix Blog author (Optional)')
-                                                    ->placeholder('Admin / Site Owner (Default)')
+                                                    ->helperText('Select a member to appear as the post author, or enter a Member ID manually.')
                                                     ->searchable()
-                                                    ->createOptionUsing(fn (string $input): string => trim($input))
-                                                    ->createOptionAction(fn (Action $action) => $action->modalHeading('Enter Custom Member ID'))
-                                                    ->helperText('Optional. Leave empty to publish as the site Admin / Owner, or pick a specific author.')
                                                     ->options(function (Get $get, WixPublishingService $wix): array {
                                                         $apiKey = (string) ($get('api_key') ?? '');
                                                         $siteId = (string) ($get('wix_site_id') ?? '');
-                                                        $current = (string) ($get('member_id') ?? '');
-
-                                                        $options = [];
-                                                        if (filled($current)) {
-                                                            $options[$current] = "Selected: {$current}";
-                                                        }
 
                                                         if (blank($apiKey) || blank($siteId)) {
-                                                            return $options;
+                                                            return [];
                                                         }
 
                                                         try {
                                                             $fetched = $wix->listMembers($apiKey, $siteId, 10);
-
-                                                            return array_replace($options, $fetched);
+                                                            return $fetched;
                                                         } catch (\Throwable) {
-                                                            return $options;
+                                                            return [];
                                                         }
                                                     })
                                                     ->suffixAction(
                                                         Action::make('fetchWixMembers')
-                                                            ->label('Refresh members')
                                                             ->icon('heroicon-o-arrow-path')
                                                             ->tooltip('Fetch last 10 members or blog authors from Wix')
                                                             ->action(function (Get $get, Set $set, WixPublishingService $wix): void {
@@ -352,7 +327,6 @@ class PublishingSettings extends Page
                                                                         ->body('Please enter your Wix API key and Wix Site ID first.')
                                                                         ->warning()
                                                                         ->send();
-
                                                                     return;
                                                                 }
 
@@ -360,13 +334,15 @@ class PublishingSettings extends Page
                                                                     $members = $wix->listMembers($apiKey, $siteId, 10);
                                                                     if (empty($members)) {
                                                                         Notification::make()
-                                                                            ->title('No specific member accounts found')
-                                                                            ->body('No separate member accounts found. Posts will automatically publish under the site Admin / Owner.')
+                                                                            ->title('No Wix members found')
+                                                                            ->body('Could not retrieve members for this site.')
                                                                             ->info()
                                                                             ->send();
-
                                                                         return;
                                                                     }
+
+                                                                    $firstId = array_key_first($members);
+                                                                    $set('member_id', $firstId);
 
                                                                     Notification::make()
                                                                         ->title('Wix authors loaded')
@@ -385,8 +361,8 @@ class PublishingSettings extends Page
                                                 Select::make('post_status')
                                                     ->label('Wix post status')
                                                     ->options([
-                                                        'draft' => 'Create or update a draft',
                                                         'publish' => 'Publish immediately',
+                                                        'draft' => 'Create as draft',
                                                     ])
                                                     ->default('draft')
                                                     ->required(),
@@ -437,10 +413,11 @@ class PublishingSettings extends Page
                                     ]),
                             ]),
                         Tab::make('Mono Blog')
-                            ->icon('heroicon-o-document-text')
+                            ->icon('brand-mono-blog')
+                            ->badge('SiteAPI')
                             ->schema([
                                 Section::make('Mono Blog Publishing')
-                                    ->description('Publish individual articles to existing Mono-powered website blogs using Mono SiteAPI.')
+                                    ->description('Publish individual articles directly to existing Mono-powered website blogs via Mono SiteAPI.')
                                     ->schema([
                                         Repeater::make('mono_blog_connections')
                                             ->label('Mono site')
@@ -526,7 +503,8 @@ class PublishingSettings extends Page
                                     ]),
                             ]),
                         Tab::make('Mono Site')
-                            ->icon('heroicon-o-globe-alt')
+                            ->icon('brand-mono-site')
+                            ->badge('Quick Creator')
                             ->schema([
                                 Section::make('Mono Site (Quick Creator)')
                                     ->description('Generate AI websites from templates and create new sites using Mono Quick Creator API.')
@@ -636,71 +614,93 @@ class PublishingSettings extends Page
                                         ])->alignStart(),
                                     ]),
                             ]),
-                        Tab::make('WordPress Webhook')
-                            ->icon('heroicon-o-link')
+                        Tab::make('General Webhook')
+                            ->icon('brand-general-webhook')
+                            ->badge('Webhook')
                             ->schema([
-                                Section::make('WordPress Webhook')
-                                    ->description('Send WordPress-shaped post fields to WP Webhooks or another WordPress listener.')
+                                Section::make('General Website Webhook')
+                                    ->description('Send a neutral JSON article payload to any website or application.')
                                     ->schema([
-                                        Toggle::make('wordpress_webhook_enabled')
-                                            ->label('Enable WordPress webhook')
+                                        Toggle::make('general_webhook_enabled')
+                                            ->label('Enable general webhook')
                                             ->live(),
-                                        TextInput::make('wordpress_webhook_priority')
+                                        TextInput::make('general_webhook_priority')
                                             ->label('Automatic publishing position')
                                             ->numeric()
                                             ->minValue(1)
                                             ->maxValue(99)
-                                            ->default(20)
-                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
-                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_webhook_enabled'))
+                                            ->default(30)
+                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
+                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('general_webhook_enabled'))
                                             ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
-                                        TextInput::make('wordpress_webhook_url')
-                                            ->label('WordPress webhook URL')
+                                        TextInput::make('general_webhook_url')
+                                            ->label('Webhook URL')
                                             ->url()
-                                            ->placeholder('https://example.com/wp-json/.../webhook')
-                                            ->required(fn (Get $get): bool => (bool) $get('wordpress_webhook_enabled')),
-                                        TextInput::make('wordpress_webhook_secret')
+                                            ->placeholder('https://example.com/webhooks/seo-content')
+                                            ->required(fn (Get $get): bool => (bool) $get('general_webhook_enabled')),
+                                        TextInput::make('general_webhook_secret')
                                             ->label('Signing secret')
                                             ->password()
                                             ->revealable()
-                                            ->helperText('Optional. Configure the same secret in the WordPress webhook receiver.'),
-                                        Select::make('wordpress_post_status')
-                                            ->label('WordPress post status')
-                                            ->options([
-                                                'publish' => 'Publish immediately',
-                                                'draft' => 'Create as draft',
-                                            ])
-                                            ->default('publish')
-                                            ->required(),
+                                            ->helperText('Optional. Used to create the X-SEOAI-Signature header.'),
                                     ]),
                             ]),
-                        Tab::make('WordPress Email')
-                            ->icon('heroicon-o-envelope')
+                        Tab::make('Content API')
+                            ->icon('brand-content-api')
+                            ->badge('Pull API')
                             ->schema([
-                                Section::make('WordPress Post by Email')
-                                    ->description('WordPress can create a post from an email. Enter the private address configured in WordPress Writing settings.')
+                                Section::make('Content Pull API')
+                                    ->description('Let another website request generated articles using a private API code.')
                                     ->schema([
-                                        Toggle::make('wordpress_email_enabled')
-                                            ->label('Enable WordPress post by email')
-                                            ->live(),
-                                        TextInput::make('wordpress_email_priority')
-                                            ->label('Automatic publishing position')
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(99)
-                                            ->default(10)
-                                            ->required(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
-                                            ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('wordpress_email_enabled'))
-                                            ->helperText('Lower numbers run first. Example: 1 runs before 2.'),
-                                        TextInput::make('wordpress_email')
-                                            ->label('Private WordPress publishing email')
-                                            ->email()
-                                            ->placeholder('private-post-address@example.com')
-                                            ->required(fn (Get $get): bool => (bool) $get('wordpress_email_enabled'))
-                                            ->helperText('Keep this address private. The article title becomes the email subject and the article HTML becomes the message body.'),
+                                        Toggle::make('content_api_enabled')
+                                            ->label('Enable Content API'),
+                                        TextInput::make('content_api_key')
+                                            ->label('API Code')
+                                            ->password()
+                                            ->revealable()
+                                            ->readOnly()
+                                            ->copyable(copyMessage: 'API code copied')
+                                            ->suffixAction(
+                                                Action::make('regenerateContentApiCode')
+                                                    ->label('Regenerate')
+                                                    ->icon('heroicon-o-arrow-path')
+                                                    ->requiresConfirmation()
+                                                    ->modalDescription('The current API code will stop working immediately.')
+                                                    ->action(function (Set $set): void {
+                                                        $apiCode = $this->newApiCode();
+
+                                                        PublishingSetting::where('user_id', auth()->id())->update([
+                                                            'content_api_key' => encrypt($apiCode),
+                                                            'content_api_key_hash' => hash('sha256', $apiCode),
+                                                        ]);
+
+                                                        $set('content_api_key', $apiCode);
+
+                                                        Notification::make()
+                                                            ->title('API code regenerated')
+                                                            ->success()
+                                                            ->send();
+                                                    }),
+                                            )
+                                            ->helperText('Send this in the X-API-Code request header. Keep it private.'),
+                                        TextInput::make('content_api_list_url')
+                                            ->label('List all publishable content')
+                                            ->readOnly()
+                                            ->copyable()
+                                            ->dehydrated(false),
+                                        TextInput::make('content_api_unread_url')
+                                            ->label('Read next unread content')
+                                            ->readOnly()
+                                            ->copyable()
+                                            ->dehydrated(false)
+                                            ->helperText('Each request returns one unread article and marks it read.'),
+                                    ])
+                                    ->columns([
+                                        'default' => 1,
+                                        'xl' => 2,
                                     ]),
                             ]),
-                    ]))
+                    ])
                     ->columnSpanFull(),
             ]);
     }

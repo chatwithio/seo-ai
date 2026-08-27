@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SeoContentDrafts\Tables;
 use App\Jobs\GenerateArticleImageJob;
 use App\Models\PublishingSetting;
 use App\Models\SeoContentDraft;
+use App\Services\ArticleImageService;
 use App\Services\ContentPublishingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -44,20 +45,43 @@ class SeoContentDraftsTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('title')
-                    ->searchable(),
+                    ->label('Article Title')
+                    ->weight('bold')
+                    ->icon('heroicon-m-document-text')
+                    ->iconColor('primary')
+                    ->description(fn (SeoContentDraft $record): ?string => $record->slug ? '🔗 /'.$record->slug : null)
+                    ->tooltip(fn (SeoContentDraft $record): ?string => $record->meta_description ?: null)
+                    ->wrap()
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('language')
                     ->badge()
-                    ->placeholder('Not recorded'),
-                TextColumn::make('slug')
-                    ->searchable(),
-                TextColumn::make('meta_title')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('meta_description')
-                    ->searchable()
+                    ->placeholder('EN')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('status')
-                    ->badge(),
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'published'  => 'success',
+                        'approved'   => 'info',
+                        'generating' => 'warning',
+                        'failed'     => 'danger',
+                        default      => 'gray',
+                    })
+                    ->icon(fn (?string $state): ?string => match ($state) {
+                        'published'  => 'heroicon-m-check-badge',
+                        'approved'   => 'heroicon-m-sparkles',
+                        'generating' => 'heroicon-m-arrow-path',
+                        'failed'     => 'heroicon-m-exclamation-circle',
+                        default      => 'heroicon-m-pencil-square',
+                    }),
+                TextColumn::make('published_url')
+                    ->label('Live URL')
+                    ->icon('heroicon-m-arrow-top-right-on-square')
+                    ->iconColor('success')
+                    ->placeholder('Not published')
+                    ->url(fn (?string $state): ?string => $state, shouldOpenInNewTab: true)
+                    ->limit(35)
+                    ->toggleable(),
                 TextColumn::make('featured_image_status')
                     ->label('Image')
                     ->badge()
@@ -71,7 +95,8 @@ class SeoContentDraftsTable
                     }),
                 TextColumn::make('published_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->label('Created At')
                     ->dateTime()
@@ -116,12 +141,13 @@ class SeoContentDraftsTable
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->button()
-                    ->modalHeading('Publish Article')
-                    ->modalDescription('Choose where this generated article should be delivered.')
-                    ->modalSubmitActionLabel('Send Content')
+                    ->modalIcon('heroicon-o-paper-airplane')
+                    ->modalHeading('🚀 Deliver & Publish Article')
+                    ->modalDescription('Select a configured publishing channel to deliver this generated SEO article.')
+                    ->modalSubmitActionLabel('Publish Content Now')
                     ->form([
                         Select::make('channel')
-                            ->label('Publishing method')
+                            ->label('Publishing Channel')
                             ->options(function (?SeoContentDraft $record): array {
                                 $settings = PublishingSetting::where('user_id', auth()->id())->first();
 
@@ -129,8 +155,10 @@ class SeoContentDraftsTable
                                     ? ContentPublishingService::availableChannels($settings, $record)
                                     : [];
                             })
-                            ->placeholder('Configure a method in Settings first')
-                            ->helperText('General webhook, WordPress, and per-site Wix methods are configured under Settings.')
+                            ->placeholder('Select a configured publishing channel...')
+                            ->helperText('Channels with ✨, 📝, 🏗️, ⚡, ✉️, 🌐 icons are configured in Publishing Settings.')
+                            ->native(false)
+                            ->searchable()
                             ->required(),
                     ])
                     ->action(function (SeoContentDraft $record, array $data, ContentPublishingService $publisher): void {

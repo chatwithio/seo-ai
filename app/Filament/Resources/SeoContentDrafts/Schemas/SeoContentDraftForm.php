@@ -28,7 +28,8 @@ class SeoContentDraftForm
             ])
             ->components([
                 Section::make('Content Source')
-                    ->description('Optional. Leave both fields empty for a standalone article, or connect it to an existing keyword group and content plan.')
+                    ->icon('heroicon-o-folder-open')
+                    ->description('Optional. Connect this article to an existing keyword group and content plan, or leave empty for a standalone article.')
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -37,6 +38,7 @@ class SeoContentDraftForm
                     ->schema([
                         Select::make('keyword_group_id')
                             ->label('Keyword Group')
+                            ->prefixIcon('heroicon-o-tag')
                             ->options(fn (): array => SeoKeywordGroup::query()
                                 ->where('user_id', auth()->id())
                                 ->orderBy('group_name')
@@ -49,6 +51,7 @@ class SeoContentDraftForm
                             ->placeholder('Standalone article'),
                         Select::make('brief_id')
                             ->label('Content Plan')
+                            ->prefixIcon('heroicon-o-clipboard-document-list')
                             ->options(fn (Get $get): array => SeoContentBrief::query()
                                 ->where('user_id', auth()->id())
                                 ->when(
@@ -84,18 +87,22 @@ class SeoContentDraftForm
                         Grid::make(1)
                             ->columnSpan(2)
                             ->schema([
-                                Section::make('Article General Details')
+                                Section::make('Article Details')
+                                    ->icon('heroicon-o-document-text')
                                     ->schema([
                                         TextInput::make('title')
                                             ->label('Article Title')
-                                            ->placeholder('Enter article title...')
+                                            ->prefixIcon('heroicon-o-document-text')
+                                            ->placeholder('e.g. 10 Proven SEO Strategies to Boost Traffic')
                                             ->required(),
                                         TextInput::make('slug')
                                             ->label('URL Slug')
-                                            ->placeholder('url-slug-goes-here'),
+                                            ->prefixIcon('heroicon-o-link')
+                                            ->placeholder('10-proven-seo-strategies'),
                                     ])->columns(2),
 
                                 Section::make('Article Content')
+                                    ->icon('heroicon-o-pencil-square')
                                     ->schema([
                                         Toggle::make('edit_source')
                                             ->label('View HTML Source Code')
@@ -145,8 +152,10 @@ class SeoContentDraftForm
                             ->columnSpan(1)
                             ->schema([
                                 Section::make('Publishing Settings')
+                                    ->icon('heroicon-o-cog-6-tooth')
                                     ->schema([
                                         Select::make('language')
+                                            ->prefixIcon('heroicon-o-language')
                                             ->options([
                                                 'English' => 'English',
                                                 'Spanish' => 'Spanish',
@@ -156,6 +165,7 @@ class SeoContentDraftForm
                                                 'Portuguese' => 'Portuguese',
                                             ]),
                                         Select::make('status')
+                                            ->prefixIcon('heroicon-o-check-circle')
                                             ->options([
                                                 'draft' => 'Draft',
                                                 'needs_review' => 'Needs review',
@@ -168,6 +178,7 @@ class SeoContentDraftForm
                                     ]),
 
                                 Section::make('Featured Image')
+                                    ->icon('heroicon-o-photo')
                                     ->description('Upload your own image or use Generate Image from the Articles list.')
                                     ->schema([
                                         FileUpload::make('featured_image_path')
@@ -188,18 +199,23 @@ class SeoContentDraftForm
                                     ]),
 
                                 Section::make('Publication Details')
+                                    ->icon('heroicon-o-globe-alt')
                                     ->schema([
                                         TextInput::make('published_url')
                                             ->label('Published URL')
+                                            ->prefixIcon('heroicon-o-arrow-top-right-on-square')
                                             ->url(),
                                         DateTimePicker::make('published_at')
-                                            ->label('Published At'),
+                                            ->label('Published At')
+                                            ->prefixIcon('heroicon-o-calendar'),
                                     ]),
 
                                 Section::make('SEO Metadata')
+                                    ->icon('heroicon-o-magnifying-glass')
                                     ->schema([
                                         TextInput::make('meta_title')
-                                            ->label('Meta Title'),
+                                            ->label('Meta Title')
+                                            ->prefixIcon('heroicon-o-sparkles'),
                                         Textarea::make('meta_description')
                                             ->label('Meta Description')
                                             ->rows(3),

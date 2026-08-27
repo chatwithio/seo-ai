@@ -132,4 +132,134 @@
     .dark .fi-ta-filter-indicators .fi-badge-delete-btn > .fi-icon {
         color: #fca5a5;
     }
+
+    /* ==========================================================================
+       UI/UX Pro Max: 2-Row Flex Publishing Tabs (Zero-Scroll Layout)
+       ========================================================================== */
+    .fi-tabs {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+        gap: 0.625rem !important;
+        padding: 0.625rem !important;
+        background-color: #f1f5f9 !important;
+        border-radius: 1rem !important;
+        border: 1px solid #e2e8f0 !important;
+        margin-bottom: 1.5rem !important;
+        width: 100% !important;
+    }
+
+    .fi-tabs::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    .dark .fi-tabs {
+        background-color: #18181b !important;
+        border-color: #27272a !important;
+    }
+
+    /* 2-Row Flex Tab Items: 4 items in Row 1, 3 items in Row 2 on desktop */
+    .fi-tabs-item {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex: 1 1 calc(25% - 0.625rem) !important;
+        min-width: 170px !important;
+        max-width: 100% !important;
+        gap: 0.5rem !important;
+        border-radius: 0.75rem !important;
+        padding: 0.625rem 0.875rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
+        cursor: pointer !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    @media (max-width: 768px) {
+        .fi-tabs-item {
+            flex: 1 1 calc(50% - 0.625rem) !important;
+        }
+    }
+
+    .dark .fi-tabs-item {
+        color: #94a3b8 !important;
+        background-color: #27272a !important;
+        border-color: #3f3f46 !important;
+        box-shadow: none !important;
+    }
+
+    .fi-tabs-item:hover {
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+        background-color: #ffffff !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05) !important;
+    }
+
+    .dark .fi-tabs-item:hover {
+        color: #f8fafc !important;
+        border-color: #52525b !important;
+        background-color: #3f3f46 !important;
+    }
+
+    /* Active tab with glowing outline */
+    .fi-tabs-item.fi-active,
+    .fi-tabs-item[aria-selected="true"] {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 1.5px #3b82f6, 0 4px 6px -1px rgb(59 130 246 / 0.15) !important;
+    }
+
+    .dark .fi-tabs-item.fi-active,
+    .dark .fi-tabs-item[aria-selected="true"] {
+        color: #ffffff !important;
+        background-color: #1e293b !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 1.5px #3b82f6, 0 4px 6px -1px rgb(59 130 246 / 0.3) !important;
+    }
+
+    /* Icon formatting */
+    .fi-tabs-item .fi-icon,
+    .fi-tabs-item-icon {
+        width: 1.35rem !important;
+        height: 1.35rem !important;
+        min-width: 1.35rem !important;
+        min-height: 1.35rem !important;
+        flex-shrink: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .fi-tabs-item svg {
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
+    }
+
+    /* Badges */
+    .fi-tabs-item .fi-badge {
+        font-size: 0.65rem !important;
+        font-weight: 700 !important;
+        padding: 0.1rem 0.45rem !important;
+        border-radius: 9999px !important;
+        letter-spacing: 0.03em !important;
+        text-transform: uppercase !important;
+    }
 }

@@ -22,6 +22,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if ($this->app->bound(\BladeUI\Icons\Factory::class)) {
+            $this->app->make(\BladeUI\Icons\Factory::class)->add('brand', [
+                'path' => resource_path('svg'),
+                'prefix' => 'brand',
+            ]);
+        }
+
         Mail::extend('dsn', function (array $config) {
             $dsn = $config['dsn'] ?? null;
 

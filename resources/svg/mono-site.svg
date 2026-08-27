@@ -1,0 +1,14 @@
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="6" fill="url(#mono_site_bg)"/>
+    <rect x="5.5" y="5.5" width="13" height="13" rx="2" stroke="#FFFFFF" stroke-width="1.5"/>
+    <line x1="5.5" y1="9" x2="18.5" y2="9" stroke="#FFFFFF" stroke-width="1.2"/>
+    <circle cx="8" cy="7.25" r="0.75" fill="#38BDF8"/>
+    <circle cx="10" cy="7.25" r="0.75" fill="#38BDF8"/>
+    <path d="M14 13L15 11L16 13L18 14L16 15L15 17L14 15L12 14L14 13Z" fill="#FDE047"/>
+    <defs>
+        <linearGradient id="mono_site_bg" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#6366F1"/>
+            <stop offset="1" stop-color="#4338CA"/>
+        </linearGradient>
+    </defs>
+</svg>
