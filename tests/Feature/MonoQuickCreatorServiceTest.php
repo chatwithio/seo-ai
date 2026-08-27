@@ -37,7 +37,7 @@ class MonoQuickCreatorServiceTest extends TestCase
         config([
             'services.mono.base_url' => 'https://mono.example/api/v1',
             'services.mono.token' => 'private-token',
-            'services.mono.template_id' => 'template-1',
+            'services.mono.template_id' => 123456,
         ]);
 
         $result = app(MonoQuickCreatorService::class)->generate([
@@ -51,6 +51,7 @@ class MonoQuickCreatorServiceTest extends TestCase
 
         Storage::disk('local')->assertExists($result['path']);
         Http::assertSent(fn ($request): bool => $request->hasHeader('Authorization', 'Bearer private-token')
-            && $request['template_id'] === 'template-1');
+            && $request['templateId'] === 123456
+            && $request['globalData']['companyName'] === 'Example');
     }
 }

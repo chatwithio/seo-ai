@@ -17,6 +17,7 @@ class ContentPublishingService
 {
     public function __construct(
         protected WixPublishingService $wix,
+        protected MonoPublishingService $mono,
         protected PublicationRetryPolicy $retryPolicy,
     ) {}
 
@@ -134,6 +135,7 @@ class ContentPublishingService
                 'wordpress_webhook' => $this->publishToWordPressWebhook($draft, $settings),
                 'wordpress_email' => $this->publishToWordPressEmail($draft, $settings),
                 'wix' => $this->publishToWix($draft),
+                'mono' => $this->publishToMono($draft),
                 default => throw new RuntimeException('Unknown publishing method.'),
             };
 
@@ -213,6 +215,15 @@ class ContentPublishingService
             $channels['wix'] = 'Wix Blog';
         }
 
+        if ($draft?->site_id && SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'mono')
+            ->where('is_enabled', true)
+            ->exists()) {
+            $channels['mono'] = 'Mono Blog';
+        }
+
         return $channels;
     }
 
@@ -227,6 +238,14 @@ class ContentPublishingService
             'general_webhook' => (int) ($settings->general_webhook_priority ?: 30),
         ];
         $channels = array_keys(self::availableChannels($settings, $draft));
+
+        if (in_array('mono', $channels, true)) {
+            $priorities['mono'] = (int) SitePublishingConnection::query()
+                ->where('user_id', $draft->user_id)
+                ->where('site_id', $draft->site_id)
+                ->where('provider', 'mono')
+                ->value('priority') ?: 50;
+        }
 
         if (in_array('wix', $channels, true)) {
             $priorities['wix'] = (int) SitePublishingConnection::query()
@@ -444,6 +463,25 @@ class ContentPublishingService
         }
 
         return $this->wix->publish($draft, $connection);
+    }
+
+    /**
+     * @return array{message: string, published_url: ?string, external_id: string}
+     */
+    private function publishToMono(SeoContentDraft $draft): array
+    {
+        $connection = SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'mono')
+            ->where('is_enabled', true)
+            ->first();
+
+        if (! $connection) {
+            throw new RuntimeException('Mono publishing is not enabled for this article site.');
+        }
+
+        return $this->mono->publish($draft, $connection);
     }
 
     private function requestFingerprint(SeoContentDraft $draft, string $channel): string

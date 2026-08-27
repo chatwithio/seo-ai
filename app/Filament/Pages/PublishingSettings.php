@@ -7,6 +7,7 @@ use App\Models\GscSite;
 use App\Models\PublishingSetting;
 use App\Models\SitePublishingConnection;
 use App\Services\AccountOnboardingService;
+use App\Services\MonoPublishingService;
 use App\Services\WixPublishingService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -93,13 +94,29 @@ class PublishingSettings extends Page
                 ->with('site:id,site_url')
                 ->get()
                 ->map(fn (SitePublishingConnection $connection): array => [
-                    'site_id' => $connection->site_id,
+                    'site_id'    => $connection->site_id,
                     'is_enabled' => $connection->is_enabled,
-                    'priority' => $connection->priority,
-                    'api_key' => $connection->credentials['api_key'] ?? '',
+                    'priority'   => $connection->priority,
+                    'api_key'    => $connection->credentials['api_key'] ?? '',
                     'wix_site_id' => $connection->settings['wix_site_id'] ?? '',
-                    'member_id' => $connection->settings['member_id'] ?? '',
+                    'member_id'  => $connection->settings['member_id'] ?? '',
                     'post_status' => $connection->settings['post_status'] ?? 'draft',
+                ])
+                ->all(),
+            'mono_connections' => SitePublishingConnection::query()
+                ->where('user_id', auth()->id())
+                ->where('provider', 'mono')
+                ->with('site:id,site_url')
+                ->get()
+                ->map(fn (SitePublishingConnection $connection): array => [
+                    'site_id'     => $connection->site_id,
+                    'is_enabled'  => $connection->is_enabled,
+                    'priority'    => $connection->priority,
+                    'username'    => $connection->credentials['username'] ?? '',
+                    'password'    => $connection->credentials['password'] ?? '',
+                    'site_url'    => $connection->settings['site_url'] ?? '',
+                    'author_name' => $connection->settings['author_name'] ?? '',
+                    'post_status' => $connection->settings['post_status'] ?? 'publish',
                 ])
                 ->all(),
         ]);
@@ -401,6 +418,95 @@ class PublishingSettings extends Page
                                         ])->alignStart(),
                                     ]),
                             ]),
+                        Tab::make('Mono')
+                            ->icon('heroicon-o-globe-europe-africa')
+                            ->schema([
+                                Section::make('Mono Blog')
+                                    ->description('Publish articles directly to a Mono-powered website blog. Credentials are encrypted at rest.')
+                                    ->schema([
+                                        Repeater::make('mono_connections')
+                                            ->label('Mono site')
+                                            ->addActionLabel('Connect Mono site')
+                                            ->schema([
+                                                Select::make('site_id')
+                                                    ->label('Managed site')
+                                                    ->options(fn (): array => \App\Models\GscSite::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->pluck('site_url', 'id')
+                                                        ->toArray())
+                                                    ->required()
+                                                    ->searchable(),
+                                                Toggle::make('is_enabled')
+                                                    ->label('Enable Mono publishing')
+                                                    ->live(),
+                                                TextInput::make('priority')
+                                                    ->label('Automatic publishing position')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->maxValue(99)
+                                                    ->default(50)
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
+                                                    ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('is_enabled'))
+                                                    ->helperText('Lower numbers run first.'),
+                                                TextInput::make('site_url')
+                                                    ->label('Mono site URL')
+                                                    ->url()
+                                                    ->placeholder('https://yoursite.monosolutions.com')
+                                                    ->required()
+                                                    ->helperText('The public URL of the Mono website (no trailing slash needed).'),
+                                                TextInput::make('username')
+                                                    ->label('Mono username')
+                                                    ->required(),
+                                                TextInput::make('password')
+                                                    ->label('Mono password')
+                                                    ->password()
+                                                    ->revealable()
+                                                    ->required(),
+                                                TextInput::make('author_name')
+                                                    ->label('Blog author name (optional)'),
+                                                Select::make('post_status')
+                                                    ->label('Post status')
+                                                    ->options([
+                                                        'publish' => 'Published (active)',
+                                                        'draft'   => 'Draft (inactive)',
+                                                    ])
+                                                    ->default('publish')
+                                                    ->required(),
+                                            ])
+                                            ->columns(2)
+                                            ->collapsible()
+                                            ->maxItems(5),
+                                        Actions::make([
+                                            Action::make('testMonoConnection')
+                                                ->label('Test Mono connection')
+                                                ->icon('heroicon-o-signal')
+                                                ->form([
+                                                    Select::make('connection_id')
+                                                        ->label('Mono-connected site')
+                                                        ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->where('user_id', auth()->id())
+                                                            ->where('provider', 'mono')
+                                                            ->with('site:id,site_url')
+                                                            ->get()
+                                                            ->mapWithKeys(fn ($c) => [$c->id => $c->site?->site_url ?? 'Site #'.$c->site_id])
+                                                            ->toArray())
+                                                        ->required(),
+                                                ])
+                                                ->action(function (array $data, MonoPublishingService $mono): void {
+                                                    $connection = SitePublishingConnection::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->where('provider', 'mono')
+                                                        ->findOrFail((int) $data['connection_id']);
+                                                    try {
+                                                        $message = $mono->testConnection($connection);
+                                                        Notification::make()->title('Mono connection works')->body($message)->success()->send();
+                                                    } catch (\Throwable $exception) {
+                                                        Notification::make()->title('Mono connection failed')->body($exception->getMessage())->danger()->send();
+                                                    }
+                                                }),
+                                        ])->alignStart(),
+                                    ]),
+                            ]),
                         Tab::make('WordPress Webhook')
                             ->icon('heroicon-o-link')
                             ->schema([
@@ -516,14 +622,42 @@ class PublishingSettings extends Page
             SitePublishingConnection::updateOrCreate(
                 ['user_id' => auth()->id(), 'provider' => 'wix'],
                 [
-                    'site_id' => $site->id,
-                    'is_enabled' => (bool) ($connectionData['is_enabled'] ?? false),
-                    'priority' => (int) ($connectionData['priority'] ?? 40),
+                    'site_id'     => $site->id,
+                    'is_enabled'  => (bool) ($connectionData['is_enabled'] ?? false),
+                    'priority'    => (int) ($connectionData['priority'] ?? 40),
                     'credentials' => ['api_key' => (string) ($connectionData['api_key'] ?? '')],
                     'settings' => [
                         'wix_site_id' => (string) ($connectionData['wix_site_id'] ?? ''),
-                        'member_id' => (string) ($connectionData['member_id'] ?? ''),
+                        'member_id'   => (string) ($connectionData['member_id'] ?? ''),
                         'post_status' => (string) ($connectionData['post_status'] ?? 'draft'),
+                    ],
+                ],
+            );
+        }
+
+        SitePublishingConnection::query()
+            ->where('user_id', auth()->id())
+            ->where('provider', 'mono')
+            ->update(['is_enabled' => false]);
+
+        foreach ($data['mono_connections'] ?? [] as $connectionData) {
+            $site = GscSite::query()
+                ->where('user_id', auth()->id())
+                ->findOrFail((int) ($connectionData['site_id'] ?? 0));
+
+            SitePublishingConnection::updateOrCreate(
+                ['user_id' => auth()->id(), 'provider' => 'mono'],
+                [
+                    'is_enabled'  => (bool) ($connectionData['is_enabled'] ?? false),
+                    'priority'    => (int) ($connectionData['priority'] ?? 50),
+                    'credentials' => [
+                        'username' => (string) ($connectionData['username'] ?? ''),
+                        'password' => (string) ($connectionData['password'] ?? ''),
+                    ],
+                    'settings' => [
+                        'site_url'    => rtrim((string) ($connectionData['site_url'] ?? ''), '/'),
+                        'author_name' => (string) ($connectionData['author_name'] ?? ''),
+                        'post_status' => (string) ($connectionData['post_status'] ?? 'publish'),
                     ],
                 ],
             );
@@ -560,7 +694,10 @@ class PublishingSettings extends Page
         $enabledWixConnections = collect($data['wix_connections'] ?? [])
             ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
 
-        if ($enabledMethods->isEmpty() && $enabledWixConnections->isEmpty()) {
+        $enabledMonoConnections = collect($data['mono_connections'] ?? [])
+            ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
+
+        if ($enabledMethods->isEmpty() && $enabledWixConnections->isEmpty() && $enabledMonoConnections->isEmpty()) {
             throw ValidationException::withMessages([
                 'data.auto_publish_enabled' => 'Enable at least one publishing method before turning on automatic publishing.',
             ]);
@@ -582,6 +719,16 @@ class PublishingSettings extends Page
             if ($priorities->contains($wixPriority)) {
                 throw ValidationException::withMessages([
                     "data.wix_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
+                ]);
+            }
+        }
+
+        foreach ($enabledMonoConnections as $index => $connection) {
+            $monoPriority = (int) ($connection['priority'] ?? 0);
+
+            if ($priorities->contains($monoPriority)) {
+                throw ValidationException::withMessages([
+                    "data.mono_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
                 ]);
             }
         }
