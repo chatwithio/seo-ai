@@ -59,11 +59,12 @@ class ContentPublishingServiceTest extends TestCase
             ], 200),
         ]);
 
-        $monoService = new MonoPublishingService();
+        $monoBlog = new MonoPublishingService();
+        $monoSite = new \App\Services\MonoQuickCreatorService();
         $wixService = new WixPublishingService();
         $retryPolicy = new PublicationRetryPolicy();
 
-        $publishingService = new ContentPublishingService($wixService, $monoService, $retryPolicy);
+        $publishingService = new ContentPublishingService($wixService, $monoBlog, $monoSite, $retryPolicy);
 
         $this->assertInstanceOf(ContentPublishingService::class, $publishingService);
     }

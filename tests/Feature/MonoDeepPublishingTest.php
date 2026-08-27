@@ -112,7 +112,7 @@ class MonoDeepPublishingTest extends TestCase
             'site_id' => $site->id,
             'seo_content_draft_id' => $draft->id,
             'content_version' => 1,
-            'channel' => 'mono',
+            'channel' => 'mono_blog',
             'status' => 'succeeded',
             'external_id' => '555',
             'request_fingerprint' => 'fp-v1',
@@ -121,7 +121,7 @@ class MonoDeepPublishingTest extends TestCase
         $connection = SitePublishingConnection::create([
             'user_id' => $user->id,
             'site_id' => $site->id,
-            'provider' => 'mono',
+            'provider' => 'mono_blog',
             'is_enabled' => true,
             'credentials' => ['username' => 'editor', 'password' => 'secret'],
             'settings' => ['site_url' => $siteUrl, 'post_status' => 'publish'],
@@ -242,7 +242,7 @@ class MonoDeepPublishingTest extends TestCase
         SitePublishingConnection::create([
             'user_id' => $user->id,
             'site_id' => $site->id,
-            'provider' => 'mono',
+            'provider' => 'mono_blog',
             'is_enabled' => true,
             'priority' => 15,
             'credentials' => ['username' => 'e2e_editor', 'password' => 'secret'],
@@ -260,7 +260,7 @@ class MonoDeepPublishingTest extends TestCase
         ]);
 
         $publisher = app(ContentPublishingService::class);
-        $result = $publisher->publish($draft, 'mono');
+        $result = $publisher->publish($draft, 'mono_blog');
 
         $draft->refresh();
 
@@ -270,7 +270,7 @@ class MonoDeepPublishingTest extends TestCase
 
         $this->assertDatabaseHas('content_publication_attempts', [
             'seo_content_draft_id' => $draft->id,
-            'channel' => 'mono',
+            'channel' => 'mono_blog',
             'status' => 'succeeded',
             'external_id' => '8888',
         ]);
@@ -362,5 +362,80 @@ class MonoDeepPublishingTest extends TestCase
         // 4. Get editor login URL
         $editorUrl = $service->getSiteEditorUrl(1406986);
         $this->assertSame('https://editor.monosolutions.com/login?ticket=xyz789', $editorUrl);
+    }
+
+    public function test_content_publishing_service_publishes_to_mono_site_channel(): void
+    {
+        Http::fake([
+            'https://qc-api.yggdrasil.dev-mono.net/api/v1/generate-content' => Http::response([
+                'status' => 'success',
+                'data' => [
+                    'en' => [
+                        'text' => ['headline' => 'Dentist Site Content'],
+                    ],
+                ],
+            ], 200),
+            'https://qc-api.yggdrasil.dev-mono.net/api/v1/sites' => Http::response([
+                'status' => 'success',
+                'data' => [
+                    'status' => 'queued',
+                    'jobId' => 99990001,
+                ],
+            ], 202),
+        ]);
+
+        $user = User::factory()->create();
+        $site = GscSite::create([
+            'user_id' => $user->id,
+            'site_url' => 'https://dentist-example.com',
+            'permission_level' => 'siteOwner',
+        ]);
+
+        PublishingSetting::updateOrCreate(
+            ['user_id' => $user->id],
+            ['auto_publish_enabled' => true],
+        );
+
+        SitePublishingConnection::create([
+            'user_id' => $user->id,
+            'site_id' => $site->id,
+            'provider' => 'mono_site',
+            'is_enabled' => true,
+            'priority' => 25,
+            'credentials' => ['api_token' => 'qc-bearer-token'],
+            'settings' => [
+                'base_url' => 'https://qc-api.yggdrasil.dev-mono.net/api/v1',
+                'template_id' => 1378062,
+                'business_type' => 'dentist',
+            ],
+        ]);
+
+        $draft = SeoContentDraft::create([
+            'user_id' => $user->id,
+            'site_id' => $site->id,
+            'title' => 'Top Dental Care Services',
+            'slug' => 'top-dental-care-services',
+            'html' => '<p>High quality dental care.</p>',
+            'status' => 'approved',
+            'content_version' => 1,
+        ]);
+
+        $publisher = app(ContentPublishingService::class);
+        $result = $publisher->publish($draft, 'mono_site');
+
+        $this->assertStringContainsString('Mono site creation job queued', $result['message']);
+        $this->assertSame('99990001', $result['external_id']);
+
+        $this->assertDatabaseHas('content_publication_attempts', [
+            'seo_content_draft_id' => $draft->id,
+            'channel' => 'mono_site',
+            'status' => 'succeeded',
+            'external_id' => '99990001',
+        ]);
+
+        // Cleanup
+        $draft->delete();
+        $site->delete();
+        $user->delete();
     }
 }

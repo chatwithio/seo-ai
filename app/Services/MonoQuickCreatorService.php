@@ -33,8 +33,8 @@ class MonoQuickCreatorService
      */
     public function generate(array $input): array
     {
-        $baseUrl = rtrim((string) config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1'), '/');
-        $token = (string) config('services.mono.token');
+        $baseUrl = rtrim((string) ($input['base_url'] ?? config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1')), '/');
+        $token = (string) ($input['api_token'] ?? $input['token'] ?? config('services.mono.token'));
         $templateId = (int) ($input['template_id'] ?? $input['templateId'] ?? config('services.mono.template_id'));
 
         if ($baseUrl === '' || $token === '' || $templateId <= 0) {
@@ -141,10 +141,10 @@ class MonoQuickCreatorService
      * @param  array<string, mixed>  $sitePayload
      * @return array{jobId: int, status: string}
      */
-    public function createSite(array $sitePayload): array
+    public function createSite(array $sitePayload, ?string $token = null, ?string $baseUrl = null): array
     {
-        $baseUrl = rtrim((string) config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1'), '/');
-        $token = (string) config('services.mono.token');
+        $baseUrl = rtrim((string) ($baseUrl ?: config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1')), '/');
+        $token = (string) ($token ?: config('services.mono.token'));
 
         if ($baseUrl === '' || $token === '') {
             throw new RuntimeException('Mono API base URL and token must be configured.');
@@ -211,6 +211,120 @@ class MonoQuickCreatorService
         }
 
         return (string) ($response->json('data.loginUrl') ?? $response->json('loginUrl') ?? '');
+    }
+
+    /**
+     * Publishes a draft by generating AI content and creating a new site via Quick Creator.
+     *
+     * @return array{message: string, published_url: ?string, external_id: string}
+     */
+    public function publish(SeoContentDraft $draft, \App\Models\SitePublishingConnection $connection): array
+    {
+        $this->assertConnection($draft, $connection);
+
+        $credentials = $connection->credentials ?? [];
+        $settings    = $connection->settings ?? [];
+        $baseUrl     = rtrim((string) ($settings['base_url'] ?? config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1')), '/');
+        $token       = (string) ($credentials['api_token'] ?? $credentials['token'] ?? config('services.mono.token'));
+        $templateId  = (int) ($settings['template_id'] ?? config('services.mono.template_id'));
+
+        if (blank($token) || $templateId <= 0) {
+            throw new RuntimeException('Mono Quick Creator API token and template ID must be configured.');
+        }
+
+        $site         = $draft->site;
+        $companyName  = (string) ($settings['company_name'] ?? $site?->name ?: parse_url((string) ($site?->site_url ?? 'https://example.com'), PHP_URL_HOST) ?: 'Company');
+        $businessType = (string) ($settings['business_type'] ?? 'generalContractor');
+        $language     = strtoupper($this->normalizeLanguageCode($draft->language ?: 'EN'));
+
+        $input = [
+            'base_url'          => $baseUrl,
+            'api_token'         => $token,
+            'template_id'       => $templateId,
+            'company'           => $companyName,
+            'business_type'     => $businessType,
+            'services'          => $draft->title,
+            'description_short' => Str::limit(strip_tags((string) ($draft->meta_description ?: $draft->plain_text ?: $draft->title)), 300, ''),
+            'site_language'     => $language,
+            'tone'              => $settings['tone_of_voice'] ?? 'Professional',
+            'audience'          => $settings['target_audience'] ?? 'B2B',
+        ];
+
+        // 1. Generate content
+        $genResult = $this->generate($input);
+        $generatedData = $genResult['response']['data'] ?? [];
+
+        // 2. Create site with the generated content
+        $sitePayload = [
+            'templateId' => $templateId,
+            'globalData' => [
+                'companyName'      => $companyName,
+                'businessType'     => $businessType,
+                'descriptionShort' => $input['description_short'],
+                'services'         => $input['services'],
+                'siteLanguage'     => $language,
+                'email'            => $settings['email'] ?? null,
+                'phone'            => $settings['phone'] ?? null,
+            ],
+            'content' => [
+                'aiData' => $generatedData,
+            ],
+        ];
+
+        $siteResult = $this->createSite($sitePayload, $token, $baseUrl);
+        $jobId = $siteResult['jobId'];
+
+        return [
+            'message'       => "Mono site creation job queued (Job ID: {$jobId}).",
+            'published_url' => null,
+            'external_id'   => (string) $jobId,
+        ];
+    }
+
+    public function testConnection(\App\Models\SitePublishingConnection $connection): string
+    {
+        $credentials = $connection->credentials ?? [];
+        $settings    = $connection->settings ?? [];
+        $baseUrl     = rtrim((string) ($settings['base_url'] ?? config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1')), '/');
+        $token       = (string) ($credentials['api_token'] ?? $credentials['token'] ?? config('services.mono.token'));
+
+        if (blank($token)) {
+            throw new RuntimeException('Mono Quick Creator Bearer API token is required.');
+        }
+
+        $response = Http::withToken($token)
+            ->acceptJson()
+            ->connectTimeout(15)
+            ->timeout(30)
+            ->get($baseUrl.'/templates', ['type' => 'ai']);
+
+        if ($response->status() === 401) {
+            throw new RuntimeException('Mono Quick Creator authentication failed — check your Bearer token.');
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Mono Quick Creator connection failed with HTTP '.$response->status().'.');
+        }
+
+        $connection->update([
+            'last_tested_at'    => now(),
+            'last_test_status'  => 'success',
+            'last_test_message' => 'Mono Quick Creator API access verified.',
+        ]);
+
+        return 'Mono Quick Creator API access verified.';
+    }
+
+    private function assertConnection(SeoContentDraft $draft, \App\Models\SitePublishingConnection $connection): void
+    {
+        if (! $connection->is_enabled || $connection->provider !== 'mono_site') {
+            throw new RuntimeException('Mono Site (Quick Creator) is not enabled for this site.');
+        }
+
+        if ((int) $connection->user_id !== (int) $draft->user_id
+            || (int) $connection->site_id !== (int) $draft->site_id) {
+            throw new RuntimeException('This Mono Site connection does not belong to the article site.');
+        }
     }
 
     private function normalizeLanguageCode(?string $lang): string

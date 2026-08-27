@@ -17,7 +17,8 @@ class ContentPublishingService
 {
     public function __construct(
         protected WixPublishingService $wix,
-        protected MonoPublishingService $mono,
+        protected MonoPublishingService $monoBlog,
+        protected MonoQuickCreatorService $monoSite,
         protected PublicationRetryPolicy $retryPolicy,
     ) {}
 
@@ -135,7 +136,8 @@ class ContentPublishingService
                 'wordpress_webhook' => $this->publishToWordPressWebhook($draft, $settings),
                 'wordpress_email' => $this->publishToWordPressEmail($draft, $settings),
                 'wix' => $this->publishToWix($draft),
-                'mono' => $this->publishToMono($draft),
+                'mono', 'mono_blog' => $this->publishToMonoBlog($draft),
+                'mono_site' => $this->publishToMonoSite($draft),
                 default => throw new RuntimeException('Unknown publishing method.'),
             };
 
@@ -218,10 +220,19 @@ class ContentPublishingService
         if ($draft?->site_id && SitePublishingConnection::query()
             ->where('user_id', $draft->user_id)
             ->where('site_id', $draft->site_id)
-            ->where('provider', 'mono')
+            ->whereIn('provider', ['mono', 'mono_blog'])
             ->where('is_enabled', true)
             ->exists()) {
-            $channels['mono'] = 'Mono Blog';
+            $channels['mono_blog'] = 'Mono Blog';
+        }
+
+        if ($draft?->site_id && SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'mono_site')
+            ->where('is_enabled', true)
+            ->exists()) {
+            $channels['mono_site'] = 'Mono Site (Quick Creator)';
         }
 
         return $channels;
@@ -239,12 +250,21 @@ class ContentPublishingService
         ];
         $channels = array_keys(self::availableChannels($settings, $draft));
 
-        if (in_array('mono', $channels, true)) {
-            $priorities['mono'] = (int) SitePublishingConnection::query()
+        if (in_array('mono_blog', $channels, true) || in_array('mono', $channels, true)) {
+            $key = in_array('mono_blog', $channels, true) ? 'mono_blog' : 'mono';
+            $priorities[$key] = (int) SitePublishingConnection::query()
                 ->where('user_id', $draft->user_id)
                 ->where('site_id', $draft->site_id)
-                ->where('provider', 'mono')
+                ->whereIn('provider', ['mono', 'mono_blog'])
                 ->value('priority') ?: 50;
+        }
+
+        if (in_array('mono_site', $channels, true)) {
+            $priorities['mono_site'] = (int) SitePublishingConnection::query()
+                ->where('user_id', $draft->user_id)
+                ->where('site_id', $draft->site_id)
+                ->where('provider', 'mono_site')
+                ->value('priority') ?: 60;
         }
 
         if (in_array('wix', $channels, true)) {
@@ -468,20 +488,39 @@ class ContentPublishingService
     /**
      * @return array{message: string, published_url: ?string, external_id: string}
      */
-    private function publishToMono(SeoContentDraft $draft): array
+    private function publishToMonoBlog(SeoContentDraft $draft): array
     {
         $connection = SitePublishingConnection::query()
             ->where('user_id', $draft->user_id)
             ->where('site_id', $draft->site_id)
-            ->where('provider', 'mono')
+            ->whereIn('provider', ['mono', 'mono_blog'])
             ->where('is_enabled', true)
             ->first();
 
         if (! $connection) {
-            throw new RuntimeException('Mono publishing is not enabled for this article site.');
+            throw new RuntimeException('Mono Blog publishing is not enabled for this article site.');
         }
 
-        return $this->mono->publish($draft, $connection);
+        return $this->monoBlog->publish($draft, $connection);
+    }
+
+    /**
+     * @return array{message: string, published_url: ?string, external_id: string}
+     */
+    private function publishToMonoSite(SeoContentDraft $draft): array
+    {
+        $connection = SitePublishingConnection::query()
+            ->where('user_id', $draft->user_id)
+            ->where('site_id', $draft->site_id)
+            ->where('provider', 'mono_site')
+            ->where('is_enabled', true)
+            ->first();
+
+        if (! $connection) {
+            throw new RuntimeException('Mono Site (Quick Creator) is not enabled for this article site.');
+        }
+
+        return $this->monoSite->publish($draft, $connection);
     }
 
     private function requestFingerprint(SeoContentDraft $draft, string $channel): string

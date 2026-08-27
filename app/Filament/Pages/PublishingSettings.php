@@ -8,6 +8,7 @@ use App\Models\PublishingSetting;
 use App\Models\SitePublishingConnection;
 use App\Services\AccountOnboardingService;
 use App\Services\MonoPublishingService;
+use App\Services\MonoQuickCreatorService;
 use App\Services\WixPublishingService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -103,9 +104,9 @@ class PublishingSettings extends Page
                     'post_status' => $connection->settings['post_status'] ?? 'draft',
                 ])
                 ->all(),
-            'mono_connections' => SitePublishingConnection::query()
+            'mono_blog_connections' => SitePublishingConnection::query()
                 ->where('user_id', auth()->id())
-                ->where('provider', 'mono')
+                ->whereIn('provider', ['mono_blog', 'mono'])
                 ->with('site:id,site_url')
                 ->get()
                 ->map(fn (SitePublishingConnection $connection): array => [
@@ -117,6 +118,23 @@ class PublishingSettings extends Page
                     'site_url'    => $connection->settings['site_url'] ?? '',
                     'author_name' => $connection->settings['author_name'] ?? '',
                     'post_status' => $connection->settings['post_status'] ?? 'publish',
+                ])
+                ->all(),
+            'mono_site_connections' => SitePublishingConnection::query()
+                ->where('user_id', auth()->id())
+                ->where('provider', 'mono_site')
+                ->with('site:id,site_url')
+                ->get()
+                ->map(fn (SitePublishingConnection $connection): array => [
+                    'site_id'         => $connection->site_id,
+                    'is_enabled'      => $connection->is_enabled,
+                    'priority'        => $connection->priority,
+                    'api_token'       => $connection->credentials['api_token'] ?? $connection->credentials['token'] ?? '',
+                    'base_url'        => $connection->settings['base_url'] ?? config('services.mono.base_url', 'https://qc-api.yggdrasil.dev-mono.net/api/v1'),
+                    'template_id'     => $connection->settings['template_id'] ?? config('services.mono.template_id', ''),
+                    'business_type'   => $connection->settings['business_type'] ?? 'consultancy',
+                    'tone_of_voice'   => $connection->settings['tone_of_voice'] ?? 'Professional',
+                    'target_audience' => $connection->settings['target_audience'] ?? 'B2B',
                 ])
                 ->all(),
         ]);
@@ -418,15 +436,15 @@ class PublishingSettings extends Page
                                         ])->alignStart(),
                                     ]),
                             ]),
-                        Tab::make('Mono')
-                            ->icon('heroicon-o-globe-europe-africa')
+                        Tab::make('Mono Blog')
+                            ->icon('heroicon-o-document-text')
                             ->schema([
-                                Section::make('Mono Blog')
-                                    ->description('Publish articles directly to a Mono-powered website blog. Credentials are encrypted at rest.')
+                                Section::make('Mono Blog Publishing')
+                                    ->description('Publish individual articles to existing Mono-powered website blogs using Mono SiteAPI.')
                                     ->schema([
-                                        Repeater::make('mono_connections')
+                                        Repeater::make('mono_blog_connections')
                                             ->label('Mono site')
-                                            ->addActionLabel('Connect Mono site')
+                                            ->addActionLabel('Connect Mono Blog site')
                                             ->schema([
                                                 Select::make('site_id')
                                                     ->label('Managed site')
@@ -437,7 +455,7 @@ class PublishingSettings extends Page
                                                     ->required()
                                                     ->searchable(),
                                                 Toggle::make('is_enabled')
-                                                    ->label('Enable Mono publishing')
+                                                    ->label('Enable Mono Blog publishing')
                                                     ->live(),
                                                 TextInput::make('priority')
                                                     ->label('Automatic publishing position')
@@ -453,7 +471,7 @@ class PublishingSettings extends Page
                                                     ->url()
                                                     ->placeholder('https://yoursite.monosolutions.com')
                                                     ->required()
-                                                    ->helperText('The public URL of the Mono website (no trailing slash needed).'),
+                                                    ->helperText('The public URL of the Mono website (e.g. https://mysite.monosolutions.com).'),
                                                 TextInput::make('username')
                                                     ->label('Mono username')
                                                     ->required(),
@@ -477,15 +495,15 @@ class PublishingSettings extends Page
                                             ->collapsible()
                                             ->maxItems(5),
                                         Actions::make([
-                                            Action::make('testMonoConnection')
-                                                ->label('Test Mono connection')
+                                            Action::make('testMonoBlogConnection')
+                                                ->label('Test Mono Blog connection')
                                                 ->icon('heroicon-o-signal')
                                                 ->form([
                                                     Select::make('connection_id')
                                                         ->label('Mono-connected site')
                                                         ->options(fn (): array => SitePublishingConnection::query()
                                                             ->where('user_id', auth()->id())
-                                                            ->where('provider', 'mono')
+                                                            ->whereIn('provider', ['mono_blog', 'mono'])
                                                             ->with('site:id,site_url')
                                                             ->get()
                                                             ->mapWithKeys(fn ($c) => [$c->id => $c->site?->site_url ?? 'Site #'.$c->site_id])
@@ -495,13 +513,124 @@ class PublishingSettings extends Page
                                                 ->action(function (array $data, MonoPublishingService $mono): void {
                                                     $connection = SitePublishingConnection::query()
                                                         ->where('user_id', auth()->id())
-                                                        ->where('provider', 'mono')
+                                                        ->whereIn('provider', ['mono_blog', 'mono'])
                                                         ->findOrFail((int) $data['connection_id']);
                                                     try {
                                                         $message = $mono->testConnection($connection);
-                                                        Notification::make()->title('Mono connection works')->body($message)->success()->send();
+                                                        Notification::make()->title('Mono Blog connection works')->body($message)->success()->send();
                                                     } catch (\Throwable $exception) {
-                                                        Notification::make()->title('Mono connection failed')->body($exception->getMessage())->danger()->send();
+                                                        Notification::make()->title('Mono Blog connection failed')->body($exception->getMessage())->danger()->send();
+                                                    }
+                                                }),
+                                        ])->alignStart(),
+                                    ]),
+                            ]),
+                        Tab::make('Mono Site')
+                            ->icon('heroicon-o-globe-alt')
+                            ->schema([
+                                Section::make('Mono Site (Quick Creator)')
+                                    ->description('Generate AI websites from templates and create new sites using Mono Quick Creator API.')
+                                    ->schema([
+                                        Repeater::make('mono_site_connections')
+                                            ->label('Mono Site creation')
+                                            ->addActionLabel('Connect Mono Quick Creator')
+                                            ->schema([
+                                                Select::make('site_id')
+                                                    ->label('Managed site')
+                                                    ->options(fn (): array => \App\Models\GscSite::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->pluck('site_url', 'id')
+                                                        ->toArray())
+                                                    ->required()
+                                                    ->searchable(),
+                                                Toggle::make('is_enabled')
+                                                    ->label('Enable Mono Site creation')
+                                                    ->live(),
+                                                TextInput::make('priority')
+                                                    ->label('Automatic publishing position')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->maxValue(99)
+                                                    ->default(60)
+                                                    ->required(fn (Get $get): bool => (bool) $get('is_enabled'))
+                                                    ->visible(fn (Get $get): bool => (bool) $get('auto_publish_enabled') && (bool) $get('is_enabled'))
+                                                    ->helperText('Lower numbers run first.'),
+                                                TextInput::make('base_url')
+                                                    ->label('Quick Creator API Base URL')
+                                                    ->default('https://qc-api.yggdrasil.dev-mono.net/api/v1')
+                                                    ->required(),
+                                                TextInput::make('api_token')
+                                                    ->label('Bearer API Token')
+                                                    ->password()
+                                                    ->revealable()
+                                                    ->required()
+                                                    ->helperText('Reseller Bearer token validated by HAL API.'),
+                                                TextInput::make('template_id')
+                                                    ->label('Default Template ID')
+                                                    ->numeric()
+                                                    ->required()
+                                                    ->placeholder('1378062')
+                                                    ->helperText('Numeric Quick Creator template ID.'),
+                                                TextInput::make('business_type')
+                                                    ->label('Business Type')
+                                                    ->default('consultancy')
+                                                    ->placeholder('consultancy, dentist, restaurant, etc.'),
+                                                Select::make('tone_of_voice')
+                                                    ->label('Tone of Voice')
+                                                    ->options([
+                                                        'Professional' => 'Professional',
+                                                        'Friendly'     => 'Friendly',
+                                                        'Direct'       => 'Direct',
+                                                        'Trust'        => 'Trust',
+                                                        'Expert'       => 'Expert',
+                                                        'Premium'      => 'Premium',
+                                                        'Local'        => 'Local',
+                                                        'Creative'     => 'Creative',
+                                                    ])
+                                                    ->default('Professional'),
+                                                Select::make('target_audience')
+                                                    ->label('Target Audience')
+                                                    ->options([
+                                                        'B2B'      => 'B2B',
+                                                        'Local'    => 'Local',
+                                                        'Families' => 'Families',
+                                                        'Value'    => 'Value',
+                                                        'Premium'  => 'Premium',
+                                                        'Urgent'   => 'Urgent',
+                                                        'Eco'      => 'Eco',
+                                                        'Trendy'   => 'Trendy',
+                                                    ])
+                                                    ->default('B2B'),
+                                            ])
+                                            ->columns(2)
+                                            ->collapsible()
+                                            ->maxItems(5),
+                                        Actions::make([
+                                            Action::make('testMonoSiteConnection')
+                                                ->label('Test Mono Quick Creator API')
+                                                ->icon('heroicon-o-signal')
+                                                ->form([
+                                                    Select::make('connection_id')
+                                                        ->label('Mono Site connection')
+                                                        ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->where('user_id', auth()->id())
+                                                            ->where('provider', 'mono_site')
+                                                            ->with('site:id,site_url')
+                                                            ->get()
+                                                            ->mapWithKeys(fn ($c) => [$c->id => $c->site?->site_url ?? 'Site #'.$c->site_id])
+                                                            ->toArray())
+                                                        ->required(),
+                                                ])
+                                                ->action(function (array $data, MonoQuickCreatorService $quickCreator): void {
+                                                    $connection = SitePublishingConnection::query()
+                                                        ->where('user_id', auth()->id())
+                                                        ->where('provider', 'mono_site')
+                                                        ->findOrFail((int) $data['connection_id']);
+                                                    try {
+                                                        $message = $quickCreator->testConnection($connection);
+                                                        Notification::make()->title('Mono Quick Creator works')->body($message)->success()->send();
+                                                    } catch (\Throwable $exception) {
+                                                        Notification::make()->title('Mono Quick Creator test failed')->body($exception->getMessage())->danger()->send();
                                                     }
                                                 }),
                                         ])->alignStart(),
@@ -637,17 +766,18 @@ class PublishingSettings extends Page
 
         SitePublishingConnection::query()
             ->where('user_id', auth()->id())
-            ->where('provider', 'mono')
+            ->whereIn('provider', ['mono', 'mono_blog'])
             ->update(['is_enabled' => false]);
 
-        foreach ($data['mono_connections'] ?? [] as $connectionData) {
+        foreach ($data['mono_blog_connections'] ?? [] as $connectionData) {
             $site = GscSite::query()
                 ->where('user_id', auth()->id())
                 ->findOrFail((int) ($connectionData['site_id'] ?? 0));
 
             SitePublishingConnection::updateOrCreate(
-                ['user_id' => auth()->id(), 'provider' => 'mono'],
+                ['user_id' => auth()->id(), 'provider' => 'mono_blog'],
                 [
+                    'site_id'     => $site->id,
                     'is_enabled'  => (bool) ($connectionData['is_enabled'] ?? false),
                     'priority'    => (int) ($connectionData['priority'] ?? 50),
                     'credentials' => [
@@ -658,6 +788,36 @@ class PublishingSettings extends Page
                         'site_url'    => rtrim((string) ($connectionData['site_url'] ?? ''), '/'),
                         'author_name' => (string) ($connectionData['author_name'] ?? ''),
                         'post_status' => (string) ($connectionData['post_status'] ?? 'publish'),
+                    ],
+                ],
+            );
+        }
+
+        SitePublishingConnection::query()
+            ->where('user_id', auth()->id())
+            ->where('provider', 'mono_site')
+            ->update(['is_enabled' => false]);
+
+        foreach ($data['mono_site_connections'] ?? [] as $connectionData) {
+            $site = GscSite::query()
+                ->where('user_id', auth()->id())
+                ->findOrFail((int) ($connectionData['site_id'] ?? 0));
+
+            SitePublishingConnection::updateOrCreate(
+                ['user_id' => auth()->id(), 'provider' => 'mono_site'],
+                [
+                    'site_id'     => $site->id,
+                    'is_enabled'  => (bool) ($connectionData['is_enabled'] ?? false),
+                    'priority'    => (int) ($connectionData['priority'] ?? 60),
+                    'credentials' => [
+                        'api_token' => (string) ($connectionData['api_token'] ?? ''),
+                    ],
+                    'settings' => [
+                        'base_url'        => rtrim((string) ($connectionData['base_url'] ?? ''), '/'),
+                        'template_id'     => (int) ($connectionData['template_id'] ?? 0),
+                        'business_type'   => (string) ($connectionData['business_type'] ?? 'consultancy'),
+                        'tone_of_voice'   => (string) ($connectionData['tone_of_voice'] ?? 'Professional'),
+                        'target_audience' => (string) ($connectionData['target_audience'] ?? 'B2B'),
                     ],
                 ],
             );
@@ -694,10 +854,13 @@ class PublishingSettings extends Page
         $enabledWixConnections = collect($data['wix_connections'] ?? [])
             ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
 
-        $enabledMonoConnections = collect($data['mono_connections'] ?? [])
+        $enabledMonoBlogConnections = collect($data['mono_blog_connections'] ?? [])
             ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
 
-        if ($enabledMethods->isEmpty() && $enabledWixConnections->isEmpty() && $enabledMonoConnections->isEmpty()) {
+        $enabledMonoSiteConnections = collect($data['mono_site_connections'] ?? [])
+            ->filter(fn (array $connection): bool => (bool) ($connection['is_enabled'] ?? false));
+
+        if ($enabledMethods->isEmpty() && $enabledWixConnections->isEmpty() && $enabledMonoBlogConnections->isEmpty() && $enabledMonoSiteConnections->isEmpty()) {
             throw ValidationException::withMessages([
                 'data.auto_publish_enabled' => 'Enable at least one publishing method before turning on automatic publishing.',
             ]);
@@ -723,12 +886,22 @@ class PublishingSettings extends Page
             }
         }
 
-        foreach ($enabledMonoConnections as $index => $connection) {
-            $monoPriority = (int) ($connection['priority'] ?? 0);
+        foreach ($enabledMonoBlogConnections as $index => $connection) {
+            $monoBlogPriority = (int) ($connection['priority'] ?? 0);
 
-            if ($priorities->contains($monoPriority)) {
+            if ($priorities->contains($monoBlogPriority)) {
                 throw ValidationException::withMessages([
-                    "data.mono_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
+                    "data.mono_blog_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
+                ]);
+            }
+        }
+
+        foreach ($enabledMonoSiteConnections as $index => $connection) {
+            $monoSitePriority = (int) ($connection['priority'] ?? 0);
+
+            if ($priorities->contains($monoSitePriority)) {
+                throw ValidationException::withMessages([
+                    "data.mono_site_connections.{$index}.priority" => 'This position is already used by another enabled publishing method.',
                 ]);
             }
         }

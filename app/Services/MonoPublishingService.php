@@ -79,7 +79,7 @@ class MonoPublishingService
         // Try to update existing post first, fall back to create
         $previousId = ContentPublicationAttempt::query()
             ->where('seo_content_draft_id', $draft->id)
-            ->where('channel', 'mono')
+            ->whereIn('channel', ['mono', 'mono_blog'])
             ->whereNotNull('external_id')
             ->latest('id')
             ->value('external_id');
@@ -236,8 +236,8 @@ class MonoPublishingService
 
     private function assertConnection(SeoContentDraft $draft, SitePublishingConnection $connection): void
     {
-        if (! $connection->is_enabled || $connection->provider !== 'mono') {
-            throw new RuntimeException('Mono publishing is not enabled for this site.');
+        if (! $connection->is_enabled || ! in_array($connection->provider, ['mono', 'mono_blog'], true)) {
+            throw new RuntimeException('Mono Blog publishing is not enabled for this site.');
         }
 
         if ((int) $connection->user_id !== (int) $draft->user_id
