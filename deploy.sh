@@ -88,9 +88,12 @@ php artisan cache:clear
 php artisan view:clear
 php artisan route:clear
 
+
+chmod -R 777 storage public/ bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache || echo "Warning: chown failed, run script with sudo if ownership changes are needed."
+
 sudo service php8.3-fpm restart || true
-sudo service php8.2-fpm restart || true
-sudo service apache2 restart || true
+sudo service nginx restart  || true
 
 echo ""
 echo "============================================"
