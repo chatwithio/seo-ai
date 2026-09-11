@@ -37,6 +37,7 @@ class ListUsers extends Command
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'phone' => $user->phone ?? '-',
             'sites' => $user->sites_count,
             'keywords' => $user->keywords_count,
             'articles' => $user->content_drafts_count,
@@ -49,7 +50,7 @@ class ListUsers extends Command
             return self::SUCCESS;
         }
 
-        $this->table(['ID', 'Name', 'Email', 'Sites', 'Keywords', 'Articles', 'Created'], $rows);
+        $this->table(['ID', 'Name', 'Email', 'Phone', 'Sites', 'Keywords', 'Articles', 'Created'], $rows);
         $this->newLine();
         $this->info(count($rows).' user(s) shown.');
 

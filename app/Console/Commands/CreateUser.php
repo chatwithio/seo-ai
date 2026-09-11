@@ -12,6 +12,7 @@ class CreateUser extends Command
     protected $signature = 'user:create
         {--name= : Account name}
         {--email= : Unique login email}
+        {--phone= : Phone number}
         {--password= : Password; omit for hidden interactive entry}
         {--verified : Mark the email address as verified}';
 
@@ -21,6 +22,7 @@ class CreateUser extends Command
     {
         $name = trim((string) ($this->option('name') ?: $this->ask('Name')));
         $email = trim((string) ($this->option('email') ?: $this->ask('Email')));
+        $phone = trim((string) ($this->option('phone') ?: ''));
         $password = (string) ($this->option('password') ?: $this->secret('Password'));
 
         if ($password === '' && ! $this->input->isInteractive()) {
@@ -56,6 +58,7 @@ class CreateUser extends Command
         $user = User::create([
             'name' => $name,
             'email' => $email,
+            'phone' => $phone !== '' ? $phone : null,
             'password' => $password,
             'email_verified_at' => $this->option('verified') ? now() : null,
         ]);

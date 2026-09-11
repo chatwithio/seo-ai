@@ -121,6 +121,21 @@
                     >
                 </div>
 
+                <!-- Phone Number Input -->
+                <div>
+                    <label for="phone" class="block text-sm font-medium text-gray-300 mb-1.5">Phone Number</label>
+                    <input
+                        type="tel"
+                        name="phone"
+                        id="phone"
+                        value="{{ old('phone') }}"
+                        required
+                        placeholder="+1 (555) 000-0000"
+                        autocomplete="tel"
+                        class="w-full rounded-xl bg-gray-900/60 border border-gray-700/50 px-4 py-3 text-white placeholder-gray-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 outline-none transition duration-200"
+                    >
+                </div>
+
                 <!-- Password Input -->
                 <div>
                     <label for="password" class="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
