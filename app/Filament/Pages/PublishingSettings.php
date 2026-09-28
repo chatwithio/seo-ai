@@ -91,6 +91,7 @@ class PublishingSettings extends Page
             'content_api_list_url' => url('/api/v1/content'),
             'content_api_unread_url' => url('/api/v1/content/unread'),
             'wix_connections' => SitePublishingConnection::query()
+                ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                 ->where('user_id', auth()->id())
                 ->where('provider', 'wix')
                 ->with('site:id,site_url')
@@ -106,6 +107,7 @@ class PublishingSettings extends Page
                 ])
                 ->all(),
             'mono_blog_connections' => SitePublishingConnection::query()
+                ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                 ->where('user_id', auth()->id())
                 ->whereIn('provider', ['mono_blog', 'mono'])
                 ->with('site:id,site_url')
@@ -122,6 +124,7 @@ class PublishingSettings extends Page
                 ])
                 ->all(),
             'mono_site_connections' => SitePublishingConnection::query()
+                ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                 ->where('user_id', auth()->id())
                 ->where('provider', 'mono_site')
                 ->with('site:id,site_url')
@@ -265,6 +268,7 @@ class PublishingSettings extends Page
                                             ->reorderable(false)
                                             ->collapsible()
                                             ->itemLabel(fn (array $state): ?string => GscSite::query()
+                                                ->where('is_active', true)
                                                 ->where('user_id', auth()->id())
                                                 ->whereKey($state['site_id'] ?? null)
                                                 ->value('site_url'))
@@ -272,6 +276,7 @@ class PublishingSettings extends Page
                                                 Select::make('site_id')
                                                     ->label('Managed site')
                                                     ->options(fn (): array => GscSite::query()
+                                                        ->where('is_active', true)
                                                         ->where('user_id', auth()->id())
                                                         ->orderBy('site_url')
                                                         ->pluck('site_url', 'id')
@@ -388,6 +393,7 @@ class PublishingSettings extends Page
                                                     Select::make('site_id')
                                                         ->label('Wix-connected site')
                                                         ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                             ->where('user_id', auth()->id())
                                                             ->where('provider', 'wix')
                                                             ->where('is_enabled', true)
@@ -399,6 +405,7 @@ class PublishingSettings extends Page
                                                 ])
                                                 ->action(function (array $data, WixPublishingService $wix): void {
                                                     $connection = SitePublishingConnection::query()
+                                                        ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                         ->where('user_id', auth()->id())
                                                         ->where('site_id', (int) $data['site_id'])
                                                         ->where('provider', 'wix')
@@ -434,6 +441,7 @@ class PublishingSettings extends Page
                                                 Select::make('site_id')
                                                     ->label('Managed site')
                                                     ->options(fn (): array => \App\Models\GscSite::query()
+                                                        ->where('is_active', true)
                                                         ->where('user_id', auth()->id())
                                                         ->pluck('site_url', 'id')
                                                         ->toArray())
@@ -487,6 +495,7 @@ class PublishingSettings extends Page
                                                     Select::make('connection_id')
                                                         ->label('Mono-connected site')
                                                         ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                             ->where('user_id', auth()->id())
                                                             ->whereIn('provider', ['mono_blog', 'mono'])
                                                             ->with('site:id,site_url')
@@ -497,6 +506,7 @@ class PublishingSettings extends Page
                                                 ])
                                                 ->action(function (array $data, MonoPublishingService $mono): void {
                                                     $connection = SitePublishingConnection::query()
+                                                        ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                         ->where('user_id', auth()->id())
                                                         ->whereIn('provider', ['mono_blog', 'mono'])
                                                         ->findOrFail((int) $data['connection_id']);
@@ -524,6 +534,7 @@ class PublishingSettings extends Page
                                                 Select::make('site_id')
                                                     ->label('Managed site')
                                                     ->options(fn (): array => \App\Models\GscSite::query()
+                                                        ->where('is_active', true)
                                                         ->where('user_id', auth()->id())
                                                         ->pluck('site_url', 'id')
                                                         ->toArray())
@@ -599,6 +610,7 @@ class PublishingSettings extends Page
                                                     Select::make('connection_id')
                                                         ->label('Mono Site connection')
                                                         ->options(fn (): array => SitePublishingConnection::query()
+                                                            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                             ->where('user_id', auth()->id())
                                                             ->where('provider', 'mono_site')
                                                             ->with('site:id,site_url')
@@ -609,6 +621,7 @@ class PublishingSettings extends Page
                                                 ])
                                                 ->action(function (array $data, MonoQuickCreatorService $quickCreator): void {
                                                     $connection = SitePublishingConnection::query()
+                                                        ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
                                                         ->where('user_id', auth()->id())
                                                         ->where('provider', 'mono_site')
                                                         ->findOrFail((int) $data['connection_id']);
@@ -748,12 +761,14 @@ class PublishingSettings extends Page
         );
 
         SitePublishingConnection::query()
+            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
             ->where('user_id', auth()->id())
             ->where('provider', 'wix')
             ->update(['is_enabled' => false]);
 
         foreach ($data['wix_connections'] ?? [] as $connectionData) {
             $site = GscSite::query()
+                ->where('is_active', true)
                 ->where('user_id', auth()->id())
                 ->findOrFail((int) ($connectionData['site_id'] ?? 0));
 
@@ -774,12 +789,14 @@ class PublishingSettings extends Page
         }
 
         SitePublishingConnection::query()
+            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
             ->where('user_id', auth()->id())
             ->whereIn('provider', ['mono', 'mono_blog'])
             ->update(['is_enabled' => false]);
 
         foreach ($data['mono_blog_connections'] ?? [] as $connectionData) {
             $site = GscSite::query()
+                ->where('is_active', true)
                 ->where('user_id', auth()->id())
                 ->findOrFail((int) ($connectionData['site_id'] ?? 0));
 
@@ -803,12 +820,14 @@ class PublishingSettings extends Page
         }
 
         SitePublishingConnection::query()
+            ->whereHas('site', fn ($query) => $query->where('is_active', true)->where('user_id', auth()->id()))
             ->where('user_id', auth()->id())
             ->where('provider', 'mono_site')
             ->update(['is_enabled' => false]);
 
         foreach ($data['mono_site_connections'] ?? [] as $connectionData) {
             $site = GscSite::query()
+                ->where('is_active', true)
                 ->where('user_id', auth()->id())
                 ->findOrFail((int) ($connectionData['site_id'] ?? 0));
 

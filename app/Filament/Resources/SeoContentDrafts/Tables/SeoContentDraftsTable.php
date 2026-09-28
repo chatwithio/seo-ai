@@ -165,13 +165,20 @@ class SeoContentDraftsTable
                         try {
                             $result = $publisher->publish($record, $data['channel']);
 
-                            Notification::make()
-                                ->title('Content delivered')
-                                ->body($result['published_url']
-                                    ? 'Published at '.$result['published_url']
-                                    : $result['message'])
-                                ->success()
-                                ->send();
+                            $notification = Notification::make()
+                                ->title(empty($result['warning']) ? 'Content delivered' : 'Content delivered without image')
+                                ->body(implode("\n\n", array_filter([
+                                    $result['published_url'] ? 'Published at '.$result['published_url'] : $result['message'],
+                                    $result['published_url'] ? ($result['warning'] ?? null) : null,
+                                ])));
+
+                            if (empty($result['warning'])) {
+                                $notification->success();
+                            } else {
+                                $notification->warning();
+                            }
+
+                            $notification->send();
                         } catch (\Throwable $exception) {
                             Notification::make()
                                 ->title('Publishing failed')

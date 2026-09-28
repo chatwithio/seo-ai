@@ -166,6 +166,7 @@ class ContentPublishingService
                     'channel' => $channel,
                     'content_version' => $version,
                     'published_url' => $result['published_url'],
+                    'warning' => $result['warning'] ?? null,
                 ],
             ]);
 
@@ -339,6 +340,7 @@ class ContentPublishingService
 
         parse_str((string) parse_url($settings->wordpress_webhook_url, PHP_URL_QUERY), $query);
         $isWpWebhooks = isset($query['wpwhpro_action']);
+        $imageWarning = null;
 
         if ($isWpWebhooks) {
             if (blank($settings->wordpress_post_author)) {
@@ -354,31 +356,39 @@ class ContentPublishingService
             $payload['post_author'] = $author;
 
             if ($image = $this->featuredImagePayload($draft)) {
-                // Import before creating the post: a failed image download must
-                // not leave a published article that will be duplicated on retry.
-                $imageResponse = $this->postWebhook(
-                    $settings->wordpress_webhook_url,
-                    [
-                        'event' => 'wordpress.create_url_attachment',
-                        'action' => 'create_url_attachment',
-                        'url' => $image['url'],
-                        'attachment_image_alt' => $image['alt'],
-                        'attachment_title' => $draft->title,
-                    ],
-                    $settings->wordpress_webhook_secret,
-                    $draft,
-                )->json();
+                try {
+                    $imageResponse = $this->postWebhook(
+                        $settings->wordpress_webhook_url,
+                        [
+                            'event' => 'wordpress.create_url_attachment',
+                            'action' => 'create_url_attachment',
+                            'url' => $image['url'],
+                            'attachment_image_alt' => $image['alt'],
+                            'attachment_title' => $draft->title,
+                        ],
+                        $settings->wordpress_webhook_secret,
+                        $draft,
+                    )->json();
 
-                $attachmentId = data_get($imageResponse, 'data.attach_id');
-                if (data_get($imageResponse, 'success') !== true || ! is_numeric($attachmentId) || $attachmentId <= 0) {
-                    throw new RuntimeException('WordPress image import failed. Enable create_url_attachment in WP Webhooks Pro and ensure the image URL is publicly reachable. '.str(
-                        is_string(data_get($imageResponse, 'msg')) ? $imageResponse['msg'] : 'No attachment ID returned.',
-                    )->limit(500));
+                    $attachmentId = data_get($imageResponse, 'data.attach_id');
+                    if (data_get($imageResponse, 'success') !== true || ! is_numeric($attachmentId) || $attachmentId <= 0) {
+                        throw new RuntimeException('WordPress image import failed. Enable create_url_attachment in WP Webhooks Pro and ensure the image URL is publicly reachable. '.str(
+                            is_string(data_get($imageResponse, 'msg')) ? $imageResponse['msg'] : 'No attachment ID returned.',
+                        )->limit(500));
+                    }
+
+                    $payload['manage_meta_data'] = json_encode([
+                        'update_post_meta' => [['meta_key' => '_thumbnail_id', 'meta_value' => (int) $attachmentId]],
+                    ], JSON_THROW_ON_ERROR);
+                } catch (Throwable $exception) {
+                    // Image delivery is optional. Never block or duplicate the
+                    // article because its featured image could not be imported.
+                    $imageWarning = 'Article delivered without its featured image. '.str(str_replace(
+                        array_filter([$settings->wordpress_webhook_url, $settings->wordpress_webhook_secret]),
+                        '[redacted]',
+                        $exception->getMessage(),
+                    ))->limit(500);
                 }
-
-                $payload['manage_meta_data'] = json_encode([
-                    'update_post_meta' => [['meta_key' => '_thumbnail_id', 'meta_value' => (int) $attachmentId]],
-                ], JSON_THROW_ON_ERROR);
             }
         }
 
@@ -400,7 +410,8 @@ class ContentPublishingService
         }
 
         return [
-            'message' => 'Content sent to the WordPress publishing webhook.',
+            'message' => $imageWarning ?? 'Content sent to the WordPress publishing webhook.',
+            'warning' => $imageWarning,
             'published_url' => $isWpWebhooks
                 ? data_get($data, 'data.permalink') : $this->publishedUrlFromResponse($response),
             'external_id' => $isWpWebhooks ? (string) data_get($data, 'data.post_id') : null,

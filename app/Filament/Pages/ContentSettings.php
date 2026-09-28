@@ -126,6 +126,7 @@ class ContentSettings extends Page
     private function sites(): Collection
     {
         return GscSite::query()
+            ->where('is_active', true)
             ->where('user_id', auth()->id())
             ->orderByRaw('COALESCE(name, site_url)')
             ->get();
@@ -271,11 +272,11 @@ class ContentSettings extends Page
 
     private function emptySitesTab(): Tab
     {
-        return Tab::make('No managed sites')
+        return Tab::make('No active sites')
             ->icon('heroicon-o-information-circle')
             ->schema([
-                Section::make('Connect a site first')
-                    ->description('Add a Google connection and sync a Search Console site before configuring content generation.')
+                Section::make('Activate a site first')
+                    ->description('Activate a site in Managed Sites before configuring content generation. If you have no sites yet, add a Google connection and sync your Search Console sites.')
                     ->schema([]),
             ]);
     }

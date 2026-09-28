@@ -136,20 +136,53 @@ class WordPressWebhookPublishingTest extends TestCase
             && json_decode($r['manage_meta_data'], true)['update_post_meta'][0]['meta_value'] === 88);
     }
 
-    public function test_image_failure_does_not_create_a_post(): void
+    public static function imageFailures(): array
+    {
+        return [['rejected'], ['http_error'], ['timeout'], ['malformed']];
+    }
+
+    #[DataProvider('imageFailures')]
+    public function test_image_failure_still_publishes_html_and_records_warning(string $failure): void
     {
         $draft = $this->draft();
         $draft->update(['featured_image_status' => 'ready', 'featured_image_url' => 'https://example.com/image.jpg']);
-        Http::fake(['*' => Http::response(['success' => false, 'msg' => 'Download failed'])]);
+        Http::fake(function ($request) use ($failure) {
+            if ($request['action'] === 'create_url_attachment') {
+                return match ($failure) {
+                    'timeout' => throw new \Illuminate\Http\Client\ConnectionException('Image timed out'),
+                    'http_error' => Http::response('Unavailable', 503),
+                    'malformed' => Http::response('<html>Invalid response</html>'),
+                    default => Http::response(['success' => false, 'msg' => 'Action disabled']),
+                };
+            }
+            return Http::response(['success' => true, 'data' => ['post_id' => 123, 'permalink' => 'https://example.com/post']]);
+        });
+        $service = app(ContentPublishingService::class);
+        $result = $service->publish($draft, 'wordpress_webhook');
+        $this->assertStringContainsString('without its featured image', $result['warning']);
+        $this->assertSame('https://example.com/post', $result['published_url']);
+        $this->assertSame('published', $draft->fresh()->status);
+        $this->assertDatabaseHas('content_publication_attempts', ['seo_content_draft_id' => $draft->id, 'status' => 'succeeded', 'external_id' => '123']);
+        $log = \App\Models\SeoAuditLog::where('entity_id', $draft->id)->where('action', 'content_delivered')->firstOrFail();
+        $this->assertSame($result['warning'], $log->context['warning']);
+        Http::assertSent(fn ($r) => $r['action'] === 'create_post' && $r['post_content'] === $draft->html && ! isset($r['manage_meta_data']));
+        $this->assertTrue($service->publish($draft, 'wordpress_webhook')['already_delivered']);
+        $this->assertCount(1, Http::recorded(fn ($r) => $r['action'] === 'create_post'));
+    }
+
+    public function test_post_failure_is_not_hidden_after_image_failure(): void
+    {
+        $draft = $this->draft();
+        $draft->update(['featured_image_status' => 'ready', 'featured_image_url' => 'https://example.com/image.jpg']);
+        Http::fake(['*' => Http::response(['success' => false, 'msg' => 'Action disabled'])]);
         try {
             app(ContentPublishingService::class)->publish($draft, 'wordpress_webhook');
-            $this->fail('Image error accepted');
+            $this->fail('Post rejection accepted');
         } catch (RuntimeException $e) {
-            $this->assertStringContainsString('WordPress image import failed', $e->getMessage());
+            $this->assertStringContainsString('did not confirm post creation', $e->getMessage());
         }
-        Http::assertSentCount(1);
-        Http::assertNotSent(fn ($r) => $r['action'] === 'create_post');
         $this->assertSame('approved', $draft->fresh()->status);
+        $this->assertDatabaseHas('content_publication_attempts', ['seo_content_draft_id' => $draft->id, 'status' => 'failed']);
     }
 
     public function test_missing_author_fails_before_sending(): void

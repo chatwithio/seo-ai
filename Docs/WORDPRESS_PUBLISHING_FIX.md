@@ -3,7 +3,7 @@
 Changes in this checkout:
 - Strip outer Markdown HTML fences when article HTML is read or saved, including rich-text paragraph wrappers; preserve internal code samples.
 - Add Publishing Settings → WordPress author ID or email. Accept `2`, `author=2`, or an existing WordPress email. WP Webhooks requests require an explicit author.
-- Import ready featured images with `create_url_attachment`, then set `_thumbnail_id` through `create_post` metadata. Failed image imports stop before post creation. An image must already be generated/uploaded and its URL publicly reachable.
+- Import ready featured images with `create_url_attachment`, then set `_thumbnail_id` through `create_post` metadata. Failed image imports do not block article publication: publish HTML without the featured image, record the warning in the delivery audit, and show a warning notification. Successful delivery remains deduplicated. An image must already be generated/uploaded and its URL publicly reachable.
 - Preserve automatic publishing's existing account-enable and approved-article requirements.
 
 ## Deployment to seoai.tochat.be
@@ -26,8 +26,16 @@ In WordPress → WP Webhooks Pro, enable/allow both `create_post` and `create_ur
 
 ## Verification and limits
 
-- 36 focused tests passed with 105 assertions against an isolated MySQL test database.
+- 40 focused tests passed with 136 assertions against an isolated MySQL test database.
 - Temporary live WordPress draft #1217 was read back with `post_author=2` and clean HTML without fences, then moved to trash.
-- Live image import is blocked by the receiver's unavailable/disabled `create_url_attachment` action; no post was created by that failed test.
+- The receiver rejects `create_url_attachment`; the publisher now continues with HTML delivery when this occurs.
 - This checkout's migration was applied and its admin account's author set to 2. These are local changes; remote deployment and remote account settings remain unverified.
 - Article #516 on seoai.tochat.be is inaccessible to the supplied admin account. Its existing WordPress copy has not been changed.
+
+## Follow-up: optional images and active sites
+
+Image rejection, malformed responses, HTTP errors, and connection failures now allow HTML delivery with a visible/audited warning. Live test draft #1220 was created despite an image-action rejection, read back with clean HTML and author 2, and then moved to trash.
+
+Publishing Settings and Content Settings now list active, account-owned sites only, including saved connections and test menus. Hidden inactive connections are excluded from the bulk disable-on-save query. The Managed Sites page still allows site activation.
+
+Deploy the latest ContentPublishingService, SeoContentDraftsTable, PublishingSettings, and ContentSettings changes to apply this follow-up.
