@@ -337,6 +337,51 @@ class ContentPublishingService
             'featured_image' => $this->featuredImagePayload($draft),
         ];
 
+        parse_str((string) parse_url($settings->wordpress_webhook_url, PHP_URL_QUERY), $query);
+        $isWpWebhooks = isset($query['wpwhpro_action']);
+
+        if ($isWpWebhooks) {
+            if (blank($settings->wordpress_post_author)) {
+                throw new RuntimeException('Set the WordPress author ID or email in Publishing Settings before publishing.');
+            }
+
+            $payload['action'] = 'create_post';
+            $payload['post_type'] = 'post';
+            $author = trim(preg_replace('/^author\s*=\s*/i', '', trim($settings->wordpress_post_author)));
+            if (! (ctype_digit($author) && (int) $author > 0) && ! filter_var($author, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('WordPress author must be a positive user ID (2 or author=2) or an existing WordPress user email.');
+            }
+            $payload['post_author'] = $author;
+
+            if ($image = $this->featuredImagePayload($draft)) {
+                // Import before creating the post: a failed image download must
+                // not leave a published article that will be duplicated on retry.
+                $imageResponse = $this->postWebhook(
+                    $settings->wordpress_webhook_url,
+                    [
+                        'event' => 'wordpress.create_url_attachment',
+                        'action' => 'create_url_attachment',
+                        'url' => $image['url'],
+                        'attachment_image_alt' => $image['alt'],
+                        'attachment_title' => $draft->title,
+                    ],
+                    $settings->wordpress_webhook_secret,
+                    $draft,
+                )->json();
+
+                $attachmentId = data_get($imageResponse, 'data.attach_id');
+                if (data_get($imageResponse, 'success') !== true || ! is_numeric($attachmentId) || $attachmentId <= 0) {
+                    throw new RuntimeException('WordPress image import failed. Enable create_url_attachment in WP Webhooks Pro and ensure the image URL is publicly reachable. '.str(
+                        is_string(data_get($imageResponse, 'msg')) ? $imageResponse['msg'] : 'No attachment ID returned.',
+                    )->limit(500));
+                }
+
+                $payload['manage_meta_data'] = json_encode([
+                    'update_post_meta' => [['meta_key' => '_thumbnail_id', 'meta_value' => (int) $attachmentId]],
+                ], JSON_THROW_ON_ERROR);
+            }
+        }
+
         $response = $this->postWebhook(
             $settings->wordpress_webhook_url,
             $payload,
@@ -344,9 +389,21 @@ class ContentPublishingService
             $draft,
         );
 
+        $data = $response->json();
+
+        if ($isWpWebhooks && (! is_array($data) || ($data['success'] ?? null) !== true
+            || ! is_numeric(data_get($data, 'data.post_id')) || data_get($data, 'data.post_id') <= 0)) {
+            throw new RuntimeException('WP Webhooks did not confirm post creation: '.str(
+                is_array($data) && is_string($data['msg'] ?? null)
+                    ? $data['msg'] : 'Expected success=true and a positive data.post_id.',
+            )->limit(500));
+        }
+
         return [
             'message' => 'Content sent to the WordPress publishing webhook.',
-            'published_url' => $this->publishedUrlFromResponse($response),
+            'published_url' => $isWpWebhooks
+                ? data_get($data, 'data.permalink') : $this->publishedUrlFromResponse($response),
+            'external_id' => $isWpWebhooks ? (string) data_get($data, 'data.post_id') : null,
         ];
     }
 
@@ -385,7 +442,8 @@ class ContentPublishingService
         $headers = [
             'Accept' => 'application/json',
             'X-SEOAI-Event' => $payload['event'],
-            'X-SEOAI-Idempotency-Key' => 'article-'.$draft->id.'-v'.max(1, (int) $draft->content_version),
+            'X-SEOAI-Idempotency-Key' => 'article-'.$draft->id.'-v'.max(1, (int) $draft->content_version)
+                .($payload['event'] === 'wordpress.create_url_attachment' ? '-image' : ''),
         ];
 
         if (filled($secret)) {

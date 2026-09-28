@@ -20,6 +20,16 @@ class SeoContentDraft extends Model
         'featured_image_generated_at' => 'datetime',
     ];
 
+    public function getHtmlAttribute(?string $value): string
+    {
+        return \App\Support\ArticleHtml::clean($value ?? '');
+    }
+
+    public function setHtmlAttribute(?string $value): void
+    {
+        $this->attributes['html'] = \App\Support\ArticleHtml::clean($value ?? '');
+    }
+
     protected static function booted()
     {
         static::saving(function (SeoContentDraft $draft): void {

@@ -119,13 +119,6 @@ PROMPT;
             $htmlContent = $this->cleanHtmlResponse($htmlContent);
         }
 
-        // Strip markdown code fences if returned by the LLM
-        if (str_starts_with($htmlContent, '```')) {
-            $htmlContent = preg_replace('/^```(?:html)?\s*/i', '', $htmlContent);
-            $htmlContent = preg_replace('/```$/', '', $htmlContent);
-            $htmlContent = trim($htmlContent);
-        }
-
         $draft = SeoContentDraft::updateOrCreate(
             ['brief_id' => $brief->id],
             [
@@ -186,14 +179,7 @@ PROMPT;
 
     private function cleanHtmlResponse(string $html): string
     {
-        $html = trim($html);
-
-        if (str_starts_with($html, '```')) {
-            $html = preg_replace('/^```(?:html)?\s*/i', '', $html);
-            $html = preg_replace('/```$/', '', $html);
-        }
-
-        return trim($html);
+        return \App\Support\ArticleHtml::clean($html);
     }
 
     private function looksSpanish(string $html): bool

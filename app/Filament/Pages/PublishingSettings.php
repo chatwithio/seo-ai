@@ -86,6 +86,7 @@ class PublishingSettings extends Page
                 'wordpress_email',
                 'wordpress_email_priority',
                 'wordpress_post_status',
+                'wordpress_post_author',
             ]),
             'content_api_list_url' => url('/api/v1/content'),
             'content_api_unread_url' => url('/api/v1/content/unread'),
@@ -199,13 +200,20 @@ class PublishingSettings extends Page
                                         TextInput::make('wordpress_webhook_url')
                                             ->label('WordPress webhook URL')
                                             ->url()
-                                            ->placeholder('https://example.com/wp-json/.../webhook')
+                                            ->placeholder('https://your-site.com/?wpwhpro_action=YOUR_WEBHOOK&wpwhpro_api_key=YOUR_API_KEY')
+                                            ->helperText('For WP Webhooks Pro, keep the plugin active on your WordPress website. Open WP Webhooks → Receive Data, create or select a webhook URL, and copy its full URL here, including wpwhpro_action and wpwhpro_api_key. Enable/allow Create post (create_post) and Create URL attachment (create_url_attachment) for featured images. Example: https://your-site.com/?wpwhpro_action=YOUR_WEBHOOK&wpwhpro_api_key=YOUR_API_KEY. ChatWithSEO adds action=create_post automatically. The API key is supplied by the plugin; keep the full URL private.')
                                             ->required(fn (Get $get): bool => (bool) $get('wordpress_webhook_enabled')),
                                         TextInput::make('wordpress_webhook_secret')
                                             ->label('Signing secret')
                                             ->password()
                                             ->revealable()
-                                            ->helperText('Optional. Configure the same secret in the WordPress webhook receiver.'),
+                                            ->helperText('Leave blank for the WP Webhooks Pro URL above: its API key already authenticates the request. This field is only for a custom receiver that verifies X-SEOAI-Signature. For such a receiver, generate a random secret (for example, run openssl rand -hex 32), enter it here, and configure the same secret in the receiver. Entering a secret here alone does not enable signature verification in WordPress.'),
+                                        TextInput::make('wordpress_post_author')
+                                            ->label('WordPress author ID or email')
+                                            ->maxLength(255)
+                                            ->placeholder('2, author=2, or editor@example.com')
+                                            ->helperText('Enter 2, author=2, or an existing WordPress user email. Find users under WordPress → Users. WP Webhooks Pro requires an explicit author here because webhook requests are not logged in as a WordPress user.')
+                                            ->required(fn (Get $get): bool => (bool) $get('wordpress_webhook_enabled') && str_contains((string) $get('wordpress_webhook_url'), 'wpwhpro_action=')),
                                         Select::make('wordpress_post_status')
                                             ->label('WordPress post status')
                                             ->options([
@@ -733,6 +741,7 @@ class PublishingSettings extends Page
                     'wordpress_email',
                     'wordpress_email_priority',
                     'wordpress_post_status',
+                    'wordpress_post_author',
                 ]),
                 'content_api_key_hash' => filled($apiCode) ? hash('sha256', $apiCode) : null,
             ],
